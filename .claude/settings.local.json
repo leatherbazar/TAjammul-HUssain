@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(powershell.exe -Command \"Get-Command node,npm -ErrorAction SilentlyContinue | Select-Object Name,Source\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ls /opt/)",
+      "Read(//etc/**)",
+      "Bash(py --version)",
+      "Bash(npx --version)",
+      "Read(//c/Users/Tajmmul/AppData/Local/Programs/**)",
+      "Bash(ls /c/Python*)",
+      "Read(//c/Users/Tajmmul/AppData/Local/Microsoft/WindowsApps/**)",
+      "Bash(/c/Users/Tajmmul/AppData/Local/Microsoft/WindowsApps/python3.exe --version)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" --version)",
+      "Bash(ls \"C:/Users/Tajmmul/OneDrive/Documents/claude ai/tat erp/node_modules/.bin/vite\"*)",
+      "Bash(gh auth:*)",
+      "Bash(git --version)"
+    ]
+  }
+}
