@@ -17,7 +17,8 @@
       "Bash(\"/c/Program Files/nodejs/node.exe\" --version)",
       "Bash(ls \"C:/Users/Tajmmul/OneDrive/Documents/claude ai/tat erp/node_modules/.bin/vite\"*)",
       "Bash(gh auth:*)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(ls /c/Users/Tajmmul/Downloads/*tataheer* /c/Users/Tajmmul/Downloads/*TAT* /c/Users/Tajmmul/Downloads/*logo* /c/Users/Tajmmul/Downloads/*tat*)"
     ]
   }
 }

@@ -9,59 +9,108 @@ const COMPANY = {
   email: 'tataheertraders@gmail.com',
 }
 
-function addHeader(doc, title, docNumber, date, stealth = false) {
-  doc.setFillColor(139, 0, 0)
-  doc.rect(0, 0, 210, 32, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(18)
-  doc.text('TATAHEER TRADERS', 14, 12)
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(COMPANY.address, 14, 18)
-  doc.text(`Tel: ${COMPANY.phone}  |  Email: ${COMPANY.email}`, 14, 23)
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.text(title, 210 - 14, 12, { align: 'right' })
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`#${docNumber}`, 210 - 14, 18, { align: 'right' })
-  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, 210 - 14, 23, { align: 'right' })
-  doc.setTextColor(0, 0, 0)
-  if (!stealth) {
-    doc.setDrawColor(139, 0, 0)
-    doc.setLineWidth(0.5)
-    doc.line(0, 32, 210, 32)
-  }
+// Table header color: dark charcoal (no red)
+const TABLE_HEAD_COLOR = [30, 30, 40]
+const ACCENT_COLOR = [80, 0, 0]
+
+function loadImg(src) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
 }
 
-function addFooter(doc, stealth = false) {
+async function addHeader(doc, title, docNumber, date, stealth = false) {
+  const pageW = doc.internal.pageSize.getWidth()
+
+  // White/light header background
+  doc.setFillColor(248, 248, 248)
+  doc.rect(0, 0, pageW, 42, 'F')
+
+  // Logo image (left side)
+  try {
+    const img = await loadImg('/tataheer-logo.png')
+    if (img) {
+      // Wide logo: TAT icon + TATAHEER TRADERS text
+      doc.addImage(img, 'PNG', 8, 4, 85, 22)
+    }
+  } catch (e) {
+    // Fallback text
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(30, 30, 30)
+    doc.text('TATAHEER TRADERS', 14, 16)
+  }
+
+  // Company address (below logo area, left)
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(80, 80, 80)
+  doc.text(COMPANY.address, 8, 30)
+  doc.text(`Tel: ${COMPANY.phone}   Email: ${COMPANY.email}`, 8, 36)
+
+  // Document title (right side, dark red)
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(120, 0, 0)
+  doc.text(title, pageW - 12, 12, { align: 'right' })
+
+  // Doc number & date
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(60, 60, 60)
+  doc.text(`No: ${docNumber}`, pageW - 12, 20, { align: 'right' })
+  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 27, { align: 'right' })
+
+  // Divider line
+  doc.setDrawColor(180, 180, 180)
+  doc.setLineWidth(0.4)
+  doc.line(0, 43, pageW, 43)
+
+  doc.setTextColor(0, 0, 0)
+}
+
+function addFooter(doc) {
   const pageCount = doc.internal.getNumberOfPages()
+  const pageW = doc.internal.pageSize.getWidth()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
-    doc.setFontSize(8)
-    doc.setTextColor(150, 150, 150)
-    doc.text('Tataheer Business Group — tataheertraders@gmail.com', 14, 290)
-    doc.text(`Page ${i} of ${pageCount}`, 210 - 14, 290, { align: 'right' })
+    doc.setFontSize(7.5)
+    doc.setTextColor(160, 160, 160)
+    doc.text(`${COMPANY.tagline}  |  ${COMPANY.email}`, 12, 289)
+    doc.text(`Page ${i} of ${pageCount}`, pageW - 12, 289, { align: 'right' })
+    // Footer line
+    doc.setDrawColor(200, 200, 200)
+    doc.setLineWidth(0.3)
+    doc.line(12, 285, pageW - 12, 285)
   }
 }
 
-export function exportQuotationPDF(quotation, stealth = false) {
+const headStyles = { fillColor: TABLE_HEAD_COLOR, textColor: 255, fontStyle: 'bold', fontSize: 9 }
+const bodyStyles = { fontSize: 8.5 }
+const altStyles = { fillColor: [245, 245, 248] }
+
+export async function exportQuotationPDF(quotation, stealth = false) {
   const doc = new jsPDF()
-  addHeader(doc, 'QUOTATION', quotation.number || 'DRAFT', quotation.date, stealth)
+  await addHeader(doc, 'QUOTATION', quotation.number || 'DRAFT', quotation.date, stealth)
 
-  let y = 40
+  let y = 50
 
-  // Client info
-  doc.setFontSize(10)
+  // Client info box
+  doc.setFillColor(240, 240, 245)
+  doc.roundedRect(12, y, 90, 20, 2, 2, 'F')
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text('Bill To:', 14, y)
+  doc.setTextColor(40, 40, 40)
+  doc.text('Bill To:', 16, y + 6)
   doc.setFont('helvetica', 'normal')
-  doc.text(quotation.clientName || '—', 14, y + 5)
-  doc.text(quotation.clientContact || '', 14, y + 10)
-  y += 20
+  doc.text(quotation.clientName || '—', 16, y + 12)
+  doc.text(quotation.clientContact || '', 16, y + 17)
+  y += 26
 
-  // Items table
   const bodyRows = []
   ;(quotation.items || []).forEach(item => {
     if (item.useMatrix && item.matrixRows?.length) {
@@ -69,20 +118,14 @@ export function exportQuotationPDF(quotation, stealth = false) {
         const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
         const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
         bodyRows.push([
-          item.description,
-          row.color,
-          sizeStr,
-          total,
+          item.description, row.color, sizeStr, total,
           stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
           stealth ? '' : `PKR ${(total * parseFloat(item.unitPrice || 0)).toLocaleString()}`
         ])
       })
     } else {
       bodyRows.push([
-        item.description,
-        item.color || '—',
-        'One Size',
-        item.qty || 0,
+        item.description, item.color || '—', 'One Size', item.qty || 0,
         stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
         stealth ? '' : `PKR ${((item.qty || 0) * parseFloat(item.unitPrice || 0)).toLocaleString()}`
       ])
@@ -94,9 +137,9 @@ export function exportQuotationPDF(quotation, stealth = false) {
     head: [['Description', 'Color', 'Sizes', 'Qty', ...(stealth ? [] : ['Unit Price', 'Amount'])]],
     body: bodyRows,
     theme: 'striped',
-    headStyles: { fillColor: [139, 0, 0], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-    bodyStyles: { fontSize: 8 },
-    alternateRowStyles: { fillColor: [250, 248, 248] },
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
   })
 
   if (!stealth) {
@@ -117,12 +160,6 @@ export function exportQuotationPDF(quotation, stealth = false) {
       tableWidth: 80,
       margin: { left: 120 },
       bodyStyles: { fontSize: 9 },
-      didDrawCell: (data) => {
-        if (data.row.index === 2) {
-          doc.setFont('helvetica', 'bold')
-          doc.setFontSize(11)
-        }
-      }
     })
   }
 
@@ -130,30 +167,34 @@ export function exportQuotationPDF(quotation, stealth = false) {
     const finalY = doc.lastAutoTable.finalY + 10
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
+    doc.setTextColor(40, 40, 40)
     doc.text('Notes:', 14, finalY)
     doc.setFont('helvetica', 'normal')
     doc.text(quotation.notes, 14, finalY + 5)
   }
 
-  addFooter(doc, stealth)
+  addFooter(doc)
   doc.save(`Quotation-${quotation.number || 'Draft'}.pdf`)
 }
 
-export function exportInvoicePDF(invoice, stealth = false) {
+export async function exportInvoicePDF(invoice, stealth = false) {
   const doc = new jsPDF()
-  addHeader(doc, 'INVOICE', invoice.number, invoice.date, stealth)
+  await addHeader(doc, 'INVOICE', invoice.number, invoice.date, stealth)
 
-  let y = 40
-  doc.setFontSize(10)
+  let y = 50
+  // Client info box
+  doc.setFillColor(240, 240, 245)
+  doc.roundedRect(12, y, 90, 16, 2, 2, 'F')
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text('Bill To:', 14, y)
+  doc.setTextColor(40, 40, 40)
+  doc.text('Bill To:', 16, y + 6)
   doc.setFont('helvetica', 'normal')
-  doc.text(invoice.clientName || '—', 14, y + 5)
-  y += 18
+  doc.text(invoice.clientName || '—', 16, y + 12)
+  y += 22
 
   const bodyRows = (invoice.items || []).map(item => [
-    item.description,
-    item.qty,
+    item.description, item.qty,
     stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
     stealth ? '' : `PKR ${(item.qty * parseFloat(item.unitPrice || 0)).toLocaleString()}`
   ])
@@ -163,8 +204,9 @@ export function exportInvoicePDF(invoice, stealth = false) {
     head: [['Description', 'Qty', ...(stealth ? [] : ['Unit Price', 'Amount'])]],
     body: bodyRows,
     theme: 'striped',
-    headStyles: { fillColor: [139, 0, 0], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-    bodyStyles: { fontSize: 8 },
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
   })
 
   if (!stealth) {
@@ -180,33 +222,38 @@ export function exportInvoicePDF(invoice, stealth = false) {
       ],
       theme: 'plain',
       columnStyles: { 0: { halign: 'right', fontStyle: 'bold' }, 1: { halign: 'right' } },
-      tableWidth: 90, margin: { left: 110 },
+      tableWidth: 90,
+      margin: { left: 110 },
       bodyStyles: { fontSize: 9 },
     })
   }
 
-  addFooter(doc, stealth)
+  addFooter(doc)
   doc.save(`Invoice-${invoice.number}.pdf`)
 }
 
-export function exportSupplyOrderPDF(order) {
+export async function exportSupplyOrderPDF(order) {
   const doc = new jsPDF()
-  addHeader(doc, 'SUPPLY ORDER', order.number || 'SO', order.date)
+  await addHeader(doc, 'SUPPLY ORDER', order.number || 'SO', order.date)
 
-  let y = 40
+  let y = 50
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(40, 40, 40)
   doc.text('Supplier:', 14, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(`${order.supplierName || '—'}  |  ${order.supplierContact || ''}`, 40, y)
-  doc.text(`Priority: ${(order.priority || 'normal').toUpperCase()}  |  Status: ${order.status || 'pending'}`, 14, y + 6)
+  doc.text(`${order.supplierName || '—'}   ${order.supplierContact || ''}`, 40, y)
+  doc.text(`Priority: ${(order.priority || 'normal').toUpperCase()}   Status: ${order.status || 'pending'}`, 14, y + 6)
   if (order.assignedToName) doc.text(`Assigned To: ${order.assignedToName}`, 14, y + 12)
   y += 20
 
   const bodyRows = (order.items || []).map((item, i) => {
     const qty = item.qty || 0
     const price = parseFloat(item.marketPrice) || 0
-    return [i + 1, item.description, item.color || '—', qty, price ? `PKR ${price.toLocaleString()}` : '—', price ? `PKR ${(qty * price).toLocaleString()}` : '—', item.note || '']
+    return [i + 1, item.description, item.color || '—', qty,
+      price ? `PKR ${price.toLocaleString()}` : '—',
+      price ? `PKR ${(qty * price).toLocaleString()}` : '—',
+      item.note || '']
   })
 
   autoTable(doc, {
@@ -214,8 +261,9 @@ export function exportSupplyOrderPDF(order) {
     head: [['#', 'Description', 'Color', 'Qty', 'Market Price', 'Amount', 'Field Note']],
     body: bodyRows,
     theme: 'striped',
-    headStyles: { fillColor: [139, 0, 0], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-    bodyStyles: { fontSize: 8 },
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
     columnStyles: { 6: { cellWidth: 35 } },
   })
 
@@ -223,6 +271,7 @@ export function exportSupplyOrderPDF(order) {
     const finalY = doc.lastAutoTable.finalY + 8
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
+    doc.setTextColor(40, 40, 40)
     doc.text('Notes:', 14, finalY)
     doc.setFont('helvetica', 'normal')
     doc.text(order.notes, 30, finalY)
@@ -232,22 +281,20 @@ export function exportSupplyOrderPDF(order) {
   doc.save(`SupplyOrder-${order.number || 'SO'}.pdf`)
 }
 
-export function exportDeliveryNotePDF(note) {
+export async function exportDeliveryNotePDF(note) {
   const doc = new jsPDF()
-  addHeader(doc, 'DELIVERY NOTE', note.number, note.date)
+  await addHeader(doc, 'DELIVERY NOTE', note.number, note.date)
 
   autoTable(doc, {
-    startY: 42,
+    startY: 50,
     head: [['Item', 'Color', 'Size Breakdown', 'Total Qty']],
     body: (note.items || []).map(item => [
-      item.description,
-      item.color || '—',
-      item.sizeBreakdown || '—',
-      item.qty
+      item.description, item.color || '—', item.sizeBreakdown || '—', item.qty
     ]),
     theme: 'striped',
-    headStyles: { fillColor: [139, 0, 0], textColor: 255, fontSize: 9 },
-    bodyStyles: { fontSize: 8 },
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
   })
 
   addFooter(doc)

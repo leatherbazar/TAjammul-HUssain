@@ -18,6 +18,7 @@ const INITIAL_DATA = {
   advances: [],
   dayBook: [],
   calendarEvents: [],
+  contacts: [],
   wallets: { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
   settings: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
 }

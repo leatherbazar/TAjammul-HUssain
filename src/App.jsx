@@ -14,6 +14,7 @@ import CalendarModule from './components/modules/CalendarModule'
 import UserManagement from './components/modules/UserManagement'
 import Settings from './components/modules/Settings'
 import ClientPortal from './components/modules/ClientPortal'
+import Contacts from './components/modules/Contacts'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { currentUser } = useApp()
@@ -36,6 +37,7 @@ function AdminRoutes() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="finance" element={<Finance />} />
           <Route path="clients" element={<ClientRequestsAdmin />} />
+          <Route path="contacts" element={<Contacts />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="settings" element={<Settings />} />
         </Routes>

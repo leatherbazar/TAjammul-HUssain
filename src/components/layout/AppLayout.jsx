@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import toast from 'react-hot-toast'
@@ -13,6 +13,7 @@ const ADMIN_NAV = [
   { path: '/admin/delivery-notes', label: 'Delivery Notes', icon: '🚚' },
   { path: '/admin/invoices', label: 'Invoices', icon: '🧾' },
   { section: 'Business' },
+  { path: '/admin/contacts', label: 'Contacts', icon: '📒' },
   { path: '/admin/inventory', label: 'Inventory', icon: '📦' },
   { path: '/admin/finance', label: 'Finance / Day Book', icon: '💰' },
   { path: '/admin/clients', label: 'Client Requests', icon: '🤝' },
@@ -51,31 +52,38 @@ function Marquee() {
 function Navbar({ user, onLogout, onToggleSidebar }) {
   return (
     <div className="navbar no-print">
+      {/* Hamburger button — always visible, toggles sidebar */}
       <button
-        className="btn btn-secondary btn-sm"
+        className="btn btn-secondary btn-sm hamburger-btn"
         onClick={onToggleSidebar}
-        style={{ padding: '6px 10px' }}
+        style={{ padding: '6px 10px', flexShrink: 0 }}
         title="Toggle sidebar"
-      >☰</button>
+        aria-label="Toggle navigation"
+      >
+        ☰
+      </button>
 
       <div className="navbar-logo">
         <img
-          src="/logo.png"
+          src="/logo-tat.png"
           alt="TAT"
           className="logo-img"
-          onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
+          style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
         />
-        <div className="logo-badge" style={{ display: 'none' }}>TAT</div>
-        <div className="logo-text">
-          <h1>TATAHEER TRADERS</h1>
-          <p>Enterprise Resource Planning 2026</p>
-        </div>
+        <img
+          src="/tataheer-logo.png"
+          alt="Tataheer Traders"
+          style={{ height: 28, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) brightness(1.15)' }}
+          className="navbar-brand-text"
+        />
       </div>
 
       <div className="navbar-spacer" />
 
       <div className="navbar-user">
-        <span style={{ fontSize: 18 }}>{user?.role === 'admin' ? '🛡️' : user?.role === 'employee' ? '👷' : '🤝'}</span>
+        <span style={{ fontSize: 18 }}>
+          {user?.role === 'admin' ? '🛡️' : user?.role === 'employee' ? '👷' : '🤝'}
+        </span>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.name}</div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{user?.username}</div>
@@ -88,26 +96,47 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
   )
 }
 
-function Sidebar({ navItems, location, onNavigate, visible }) {
+function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose }) {
   return (
-    <div className="sidebar no-print" style={{ display: visible ? 'flex' : 'none', width: visible ? 'var(--sidebar-w)' : 0 }}>
-      {navItems.map((item, i) => {
-        if (item.section) return (
-          <div key={i} className="sidebar-section">{item.section}</div>
-        )
-        const isActive = location.pathname === item.path || (item.path !== '/admin' && item.path !== '/employee' && item.path !== '/client' && location.pathname.startsWith(item.path))
-        return (
-          <button
-            key={i}
-            className={`nav-link ${isActive ? 'active' : ''}`}
-            onClick={() => onNavigate(item.path)}
-          >
-            <span className="icon">{item.icon}</span>
-            {item.label}
-          </button>
-        )
-      })}
-    </div>
+    <>
+      {/* Overlay — shown on mobile when sidebar is open */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay no-print"
+          onClick={onClose}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <div className={`sidebar no-print${sidebarOpen ? ' sidebar-open' : ''}`}>
+        {navItems.map((item, i) => {
+          if (item.section) return (
+            <div key={i} className="sidebar-section">{item.section}</div>
+          )
+          const isActive =
+            location.pathname === item.path ||
+            (
+              item.path !== '/admin' &&
+              item.path !== '/employee' &&
+              item.path !== '/client' &&
+              location.pathname.startsWith(item.path)
+            )
+          return (
+            <button
+              key={i}
+              className={`nav-link ${isActive ? 'active' : ''}`}
+              onClick={() => {
+                onNavigate(item.path)
+                onClose() // close sidebar on mobile after navigating
+              }}
+            >
+              <span className="icon">{item.icon}</span>
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -115,13 +144,24 @@ export default function AppLayout({ children }) {
   const { currentUser, setCurrentUser } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
-  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = () => {
     setCurrentUser(null)
     toast.success('Logged out successfully.')
     navigate('/')
   }
+
+  // Close sidebar on route change (covers back-button navigation)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
+  // Prevent body scroll when mobile sidebar is open
+  useEffect(() => {
+    document.body.style.overflow = sidebarOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [sidebarOpen])
 
   const navItems = currentUser?.role === 'admin' ? ADMIN_NAV
     : currentUser?.role === 'employee' ? EMPLOYEE_NAV
@@ -130,9 +170,19 @@ export default function AppLayout({ children }) {
   return (
     <>
       <Marquee />
-      <Navbar user={currentUser} onLogout={handleLogout} onToggleSidebar={() => setSidebarVisible(v => !v)} />
+      <Navbar
+        user={currentUser}
+        onLogout={handleLogout}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
+      />
       <div className="app-layout">
-        <Sidebar navItems={navItems} location={location} onNavigate={navigate} visible={sidebarVisible} />
+        <Sidebar
+          navItems={navItems}
+          location={location}
+          onNavigate={navigate}
+          sidebarOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
         <div className="main-content fade-in">
           {children}
         </div>

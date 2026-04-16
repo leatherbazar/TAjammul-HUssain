@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
+import ContactSelect from '../common/ContactSelect'
 import { exportSupplyOrderPDF } from '../../utils/pdfExport'
 import toast from 'react-hot-toast'
 
@@ -43,7 +44,13 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
             <>
               <div className="input-group">
                 <label className="input-label">Supplier Name</label>
-                <input className="input" value={form.supplierName} onChange={e => setField('supplierName', e.target.value)} />
+                <ContactSelect
+                  type="supplier"
+                  value={form.supplierName}
+                  onChange={(name) => setField('supplierName', name)}
+                  onContactSelect={(c) => setField('supplierContact', c.phone || form.supplierContact)}
+                  placeholder="Select or type supplier..."
+                />
               </div>
               <div className="input-group">
                 <label className="input-label">Supplier Contact</label>

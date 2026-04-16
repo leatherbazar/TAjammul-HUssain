@@ -71,54 +71,23 @@ export default function Dashboard() {
         <StatCard label="📦 Inventory Items" value={(data.inventory || []).length} sub="Active SKUs" className="card-purple" icon="📦" />
       </div>
 
-      {/* Wallet Cards */}
-      <div className="wallet-cards">
-        <WalletCard icon="💵" name="Cash" amount={data.wallets?.cash} color="var(--green)" />
-        <WalletCard icon="🏦" name="Bank" amount={data.wallets?.bank} color="var(--blue)" />
-        <WalletCard icon="📱" name="JazzCash" amount={data.wallets?.jazzcash} color="var(--amber)" />
-        <WalletCard icon="🟢" name="EasyPaisa" amount={data.wallets?.easypaisa} color="var(--green)" />
-      </div>
 
-      {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 24 }}>
-        <div className="section-box">
-          <div className="section-title">📈 Monthly Performance</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="inv" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--red)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--red)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="rec" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--green)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--green)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--glass-border)', borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="invoiced" name="Invoiced" stroke="var(--red)" fill="url(#inv)" strokeWidth={2} />
-              <Area type="monotone" dataKey="recovered" name="Recovered" stroke="var(--green)" fill="url(#rec)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="section-box">
-          <div className="section-title">📋 Quick Stats</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[
-              { label: 'Active Clients', val: (data.users?.clients || []).length, color: 'var(--green)' },
-              { label: 'Employees', val: (data.users?.employees || []).length, color: 'var(--blue)' },
-              { label: 'Pending Orders', val: (data.supplyOrders || []).filter(s => s.status === 'pending').length, color: 'var(--amber)' },
-              { label: 'Client Requests', val: (data.quotations || []).filter(q => q.source === 'client').length, color: 'var(--purple)' },
-            ].map(item => (
-              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--glass-border)' }}>
-                <span style={{ fontSize: 13 }}>{item.label}</span>
-                <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Orbitron, sans-serif', color: item.color }}>{item.val}</span>
-              </div>
-            ))}
-          </div>
+      {/* Quick Stats — 2×2 half-size cards */}
+      <div style={{ marginBottom: 24 }}>
+        <div className="section-title" style={{ marginBottom: 12 }}>📋 Quick Stats</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          {[
+            { label: 'Active Clients', val: (data.users?.clients || []).length, color: 'var(--green)', icon: '🤝' },
+            { label: 'Employees', val: (data.users?.employees || []).length, color: 'var(--blue)', icon: '👷' },
+            { label: 'Pending Orders', val: (data.supplyOrders || []).filter(s => s.status === 'pending').length, color: 'var(--amber)', icon: '🛒' },
+            { label: 'Client Requests', val: (data.quotations || []).filter(q => q.source === 'client').length, color: 'var(--purple)', icon: '📋' },
+          ].map(item => (
+            <div key={item.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px 8px', borderRadius: 10, background: 'var(--glass)', border: `1px solid ${item.color}44`, gap: 4 }}>
+              <span style={{ fontSize: 18 }}>{item.icon}</span>
+              <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Orbitron, sans-serif', color: item.color }}>{item.val}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center' }}>{item.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 

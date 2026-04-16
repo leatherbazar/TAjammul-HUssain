@@ -81,20 +81,19 @@ export default function Login() {
     <div className="login-page">
       {/* Logo / Header */}
       <div className="login-header fade-in">
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <img
-            src="/logo.png"
-            alt="Tataheer Traders"
-            style={{ height: 80, objectFit: 'contain' }}
-            onError={e => {
-              e.target.style.display = 'none'
-              e.target.nextSibling.style.display = 'flex'
-            }}
+            src="/logo-tat.png"
+            alt="TAT Logo"
+            style={{ height: 90, objectFit: 'contain', filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.5))' }}
           />
-          <div className="login-logo" style={{ display: 'none' }}>TAT</div>
+          <img
+            src="/tataheer-logo.png"
+            alt="Tataheer Traders"
+            style={{ height: 38, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.6)) brightness(1.1)' }}
+          />
         </div>
-        <h1>TATAHEER TRADERS</h1>
-        <p>Enterprise Resource Planning System — 2026 Edition</p>
+        <p style={{ marginTop: 6 }}>Enterprise Resource Planning System — 2026 Edition</p>
       </div>
 
       {/* Portal Selector */}

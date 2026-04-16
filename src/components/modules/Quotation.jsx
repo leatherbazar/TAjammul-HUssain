@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
+import ContactSelect from '../common/ContactSelect'
 import { exportQuotationPDF } from '../../utils/pdfExport'
 import { exportQuotationExcel } from '../../utils/excelExport'
 import toast from 'react-hot-toast'
@@ -49,18 +50,13 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
         <div className="form-grid form-grid-3">
           <div className="input-group">
             <label className="input-label">Client Name *</label>
-            <input className="input" placeholder="Client / Company name" value={form.clientName}
-              onChange={e => {
-                setField('clientName', e.target.value)
-                const found = (clients || []).find(c => c.name === e.target.value || c.username === e.target.value)
-                if (found) setField('clientContact', found.phone || '')
-              }}
-              list="client-list"
-              spellCheck
+            <ContactSelect
+              type="client"
+              value={form.clientName}
+              onChange={(name) => setField('clientName', name)}
+              onContactSelect={(c) => setField('clientContact', c.phone || form.clientContact)}
+              placeholder="Select or type client..."
             />
-            <datalist id="client-list">
-              {(clients || []).map(c => <option key={c.id} value={c.name}>{c.company}</option>)}
-            </datalist>
           </div>
           <div className="input-group">
             <label className="input-label">Contact</label>
