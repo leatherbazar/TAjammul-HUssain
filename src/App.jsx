@@ -15,6 +15,7 @@ import UserManagement from './components/modules/UserManagement'
 import Settings from './components/modules/Settings'
 import ClientPortal from './components/modules/ClientPortal'
 import Contacts from './components/modules/Contacts'
+import Ledger from './components/modules/Ledger'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { currentUser } = useApp()
@@ -38,6 +39,7 @@ function AdminRoutes() {
           <Route path="finance" element={<Finance />} />
           <Route path="clients" element={<ClientRequestsAdmin />} />
           <Route path="contacts" element={<Contacts />} />
+          <Route path="ledger" element={<Ledger />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="settings" element={<Settings />} />
         </Routes>

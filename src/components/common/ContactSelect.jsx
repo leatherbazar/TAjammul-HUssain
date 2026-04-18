@@ -1,24 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { useApp } from '../../context/AppContext'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 
 /**
- * ContactSelect — searchable dropdown to pick a saved contact
+ * ContactSelect — live-search dropdown against /api/contacts/search
  * Props:
  *   type: 'supplier' | 'client' | 'staff' | null (all)
  *   value: current text value
- *   onChange: (name, contact) => void  — contact is the full object or null if typed manually
+ *   onChange: (name, contact) => void
+ *   onContactSelect: (contact) => void  — auto-fill phone/email/accountHeadID
  *   placeholder: string
- *   onContactSelect: (contact) => void  — called when a contact is selected, for auto-filling phone/email
  */
 export default function ContactSelect({ type, value, onChange, placeholder, onContactSelect }) {
-  const { data } = useApp()
-  const contacts = (data.contacts || []).filter(c => !type || c.type === type)
-
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value || '')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
   const ref = useRef()
+  const debounceRef = useRef()
 
-  // Sync external value changes
+  // Sync external value
   useEffect(() => { setQuery(value || '') }, [value])
 
   // Close on outside click
@@ -28,23 +27,44 @@ export default function ContactSelect({ type, value, onChange, placeholder, onCo
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const filtered = contacts.filter(c =>
-    c.name?.toLowerCase().includes(query.toLowerCase()) ||
-    c.accountCode?.toLowerCase().includes(query.toLowerCase()) ||
-    c.phone?.includes(query)
-  )
+  const search = useCallback((q) => {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      if (!q || q.length < 1) { setResults([]); return }
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({ q })
+        if (type) params.append('type', type)
+        const res = await fetch(`/api/contacts/search?${params}`)
+        const data = await res.json()
+        setResults(data.contacts || [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 200)
+  }, [type])
+
+  const handleInput = (e) => {
+    const val = e.target.value
+    setQuery(val)
+    onChange(val, null)
+    setOpen(true)
+    search(val)
+  }
+
+  const handleFocus = () => {
+    setOpen(true)
+    if (!results.length) search(query || '')
+  }
 
   const handleSelect = (contact) => {
     setQuery(contact.name)
     onChange(contact.name, contact)
     onContactSelect?.(contact)
     setOpen(false)
-  }
-
-  const handleInput = (e) => {
-    setQuery(e.target.value)
-    onChange(e.target.value, null)
-    setOpen(true)
+    setResults([])
   }
 
   const typeColor = {
@@ -59,21 +79,24 @@ export default function ContactSelect({ type, value, onChange, placeholder, onCo
         className="input"
         value={query}
         onChange={handleInput}
-        onFocus={() => setOpen(true)}
+        onFocus={handleFocus}
         placeholder={placeholder || 'Type or select...'}
         autoComplete="off"
       />
 
-      {open && filtered.length > 0 && (
+      {open && (results.length > 0 || loading) && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
           background: 'var(--bg2)', border: '1px solid var(--glass-border)',
           borderRadius: 8, maxHeight: 220, overflowY: 'auto',
           boxShadow: '0 8px 32px rgba(0,0,0,0.5)', marginTop: 2
         }}>
-          {filtered.map(c => (
+          {loading && (
+            <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)' }}>Searching...</div>
+          )}
+          {results.map(c => (
             <div
-              key={c.id}
+              key={c._id || c.id}
               onMouseDown={() => handleSelect(c)}
               style={{
                 padding: '8px 12px', cursor: 'pointer', display: 'flex',
@@ -90,11 +113,18 @@ export default function ContactSelect({ type, value, onChange, placeholder, onCo
                 </div>
                 {c.phone && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.phone}</div>}
               </div>
-              {c.accountCode && (
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace', background: 'var(--glass)', padding: '2px 6px', borderRadius: 4 }}>
-                  {c.accountCode}
-                </span>
-              )}
+              <div style={{ textAlign: 'right' }}>
+                {c.accountHeadID && (
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace', background: 'var(--glass)', padding: '2px 6px', borderRadius: 4 }}>
+                    {c.accountHeadID}
+                  </span>
+                )}
+                {c.currentBalance !== undefined && (
+                  <div style={{ fontSize: 10, color: c.currentBalance >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>
+                    Bal: PKR {Number(c.currentBalance).toLocaleString()}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

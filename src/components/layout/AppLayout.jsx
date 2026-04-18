@@ -14,6 +14,7 @@ const ADMIN_NAV = [
   { path: '/admin/invoices', label: 'Invoices', icon: '🧾' },
   { section: 'Business' },
   { path: '/admin/contacts', label: 'Contacts', icon: '📒' },
+  { path: '/admin/ledger', label: 'Ledger', icon: '📗' },
   { path: '/admin/inventory', label: 'Inventory', icon: '📦' },
   { path: '/admin/finance', label: 'Finance / Day Book', icon: '💰' },
   { path: '/admin/clients', label: 'Client Requests', icon: '🤝' },

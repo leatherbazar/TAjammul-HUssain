@@ -1,5 +1,4 @@
-import React, { useState } from 'react'
-import { useApp } from '../../context/AppContext'
+import React, { useState, useEffect } from 'react'
 import MasterCodeModal from '../common/MasterCodeModal'
 import toast from 'react-hot-toast'
 
@@ -11,57 +10,98 @@ const TYPES = [
 
 const EMPTY_FORM = {
   type: 'supplier', name: '', phone: '', email: '',
-  address: '', notes: '', openingBalance: 0, accountCode: ''
+  address: '', notes: '', openingBalance: 0
 }
 
 export default function Contacts() {
-  const { data, addRecord, updateRecord, deleteRecord, verifyMasterCode } = useApp()
-  const contacts = data.contacts || []
-
   const [activeTab, setActiveTab] = useState('supplier')
   const [view, setView] = useState('list')
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState(null)
   const [search, setSearch] = useState('')
+  const [contacts, setContacts] = useState([])
+  const [loading, setLoading] = useState(false)
   const [mcModal, setMcModal] = useState({ open: false, action: null })
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/contacts')
+      const data = await res.json()
+      setContacts(data.contacts || [])
+    } catch {
+      toast.error('Failed to load contacts')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
 
   const filtered = contacts.filter(c =>
     c.type === activeTab &&
     (c.name?.toLowerCase().includes(search.toLowerCase()) ||
      c.phone?.includes(search) ||
-     c.accountCode?.toLowerCase().includes(search.toLowerCase()))
+     c.accountHeadID?.toLowerCase().includes(search.toLowerCase()))
   )
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) return toast.error('Name is required')
-    if (editId) {
-      updateRecord('contacts', editId, { ...form })
-      toast.success('Contact updated!')
-    } else {
-      addRecord('contacts', { ...form })
-      toast.success('Contact added!')
+    try {
+      if (editId) {
+        const res = await fetch(`/api/contacts/${editId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        })
+        if (!res.ok) throw new Error()
+        toast.success('Contact updated!')
+      } else {
+        const res = await fetch('/api/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.error || 'Failed')
+        }
+        toast.success('Contact added!')
+      }
+      await load()
+      setView('list')
+      setForm(EMPTY_FORM)
+      setEditId(null)
+    } catch (err) {
+      toast.error(err.message || 'Save failed')
     }
-    setView('list')
-    setForm(EMPTY_FORM)
-    setEditId(null)
   }
 
   const handleEdit = (c) => {
     setMcModal({
       open: true, action: () => {
-        setForm({ ...EMPTY_FORM, ...c })
+        setForm({
+          type: c.type, name: c.name, phone: c.phone || '',
+          email: c.email || '', address: c.address || '',
+          notes: c.notes || '', openingBalance: c.openingBalance || 0
+        })
         setEditId(c.id)
         setView('form')
       }
     })
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = (c) => {
     setMcModal({
-      open: true, action: () => {
-        deleteRecord('contacts', id)
-        toast.success('Contact deleted')
+      open: true, action: async () => {
+        try {
+          await fetch(`/api/contacts/${c.id}`, { method: 'DELETE' })
+          toast.success('Contact deleted')
+          await load()
+        } catch {
+          toast.error('Delete failed')
+        }
       }
     })
   }
@@ -100,7 +140,6 @@ export default function Contacts() {
 
       {view === 'list' && (
         <>
-          {/* Search */}
           <div style={{ marginBottom: 16 }}>
             <input
               className="input"
@@ -111,7 +150,9 @@ export default function Contacts() {
             />
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+          ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 14 }}>
               No {activeType?.label.toLowerCase()} yet. Click "+ Add" to create one.
             </div>
@@ -120,30 +161,36 @@ export default function Contacts() {
               <table>
                 <thead>
                   <tr>
-                    <th>Code</th>
+                    <th>Account ID</th>
                     <th>Name</th>
                     <th>Phone</th>
                     <th>Email</th>
                     <th>Address</th>
                     <th>Opening Bal.</th>
+                    <th>Current Bal.</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(c => (
-                    <tr key={c.id}>
-                      <td className="font-mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.accountCode || '—'}</td>
+                    <tr key={c.id || c.accountHeadID}>
+                      <td className="font-mono" style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>
+                        {c.accountHeadID || '—'}
+                      </td>
                       <td style={{ fontWeight: 700, color: activeType.color }}>{c.name}</td>
                       <td>{c.phone || '—'}</td>
                       <td style={{ fontSize: 12 }}>{c.email || '—'}</td>
                       <td style={{ fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address || '—'}</td>
-                      <td style={{ color: 'var(--green)', fontWeight: 700 }}>
-                        {Number(c.openingBalance || 0).toLocaleString()}
+                      <td style={{ color: 'var(--text-muted)' }}>
+                        PKR {Number(c.openingBalance || 0).toLocaleString()}
+                      </td>
+                      <td style={{ color: (c.currentBalance || 0) >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+                        PKR {Number(c.currentBalance || 0).toLocaleString()}
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-secondary btn-xs" onClick={() => handleEdit(c)}>✏️</button>
-                          <button className="btn btn-danger btn-xs" onClick={() => handleDelete(c.id)}>🗑️</button>
+                          <button className="btn btn-danger btn-xs" onClick={() => handleDelete(c)}>🗑️</button>
                         </div>
                       </td>
                     </tr>
@@ -169,38 +216,46 @@ export default function Contacts() {
                 </select>
               </div>
               <div className="input-group">
-                <label className="input-label">Account Code (optional)</label>
-                <input className="input" placeholder="e.g. SUP-001, CLI-I2C" value={form.accountCode} onChange={e => setForm(f => ({ ...f, accountCode: e.target.value }))} />
+                <label className="input-label">Account ID (auto-generated)</label>
+                <input className="input" disabled placeholder={`e.g. ${form.type === 'client' ? 'CLI' : form.type === 'supplier' ? 'SUP' : 'STF'}-001`}
+                  style={{ opacity: 0.5 }} />
               </div>
               <div className="input-group col-span-2">
                 <label className="input-label">Full Name *</label>
-                <input className="input" placeholder="Contact / Company name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+                <input className="input" placeholder="Contact / Company name" value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
               </div>
               <div className="input-group">
                 <label className="input-label">Phone</label>
-                <input className="input" placeholder="+92..." value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+                <input className="input" placeholder="+92..." value={form.phone}
+                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
               </div>
               <div className="input-group">
                 <label className="input-label">Email</label>
-                <input className="input" type="email" placeholder="email@example.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                <input className="input" type="email" placeholder="email@example.com" value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
               </div>
               <div className="input-group col-span-2">
                 <label className="input-label">Address</label>
-                <input className="input" placeholder="Street, City" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+                <input className="input" placeholder="Street, City" value={form.address}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
               </div>
               <div className="input-group">
                 <label className="input-label">Opening Balance (PKR)</label>
-                <input className="input" type="number" min="0" value={form.openingBalance} onChange={e => setForm(f => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))} />
+                <input className="input" type="number" min="0" value={form.openingBalance}
+                  onChange={e => setForm(f => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))} />
               </div>
               <div className="input-group">
                 <label className="input-label">Notes</label>
-                <input className="input" placeholder="Any notes..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+                <input className="input" placeholder="Any notes..." value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
             </div>
 
             <div className="form-actions" style={{ marginTop: 24, display: 'flex', gap: 10 }}>
               <button type="submit" className="btn btn-primary">💾 Save Contact</button>
-              <button type="button" className="btn btn-secondary" onClick={() => { setView('list'); setForm(EMPTY_FORM); setEditId(null) }}>Cancel</button>
+              <button type="button" className="btn btn-secondary"
+                onClick={() => { setView('list'); setForm(EMPTY_FORM); setEditId(null) }}>Cancel</button>
             </div>
           </form>
         </div>

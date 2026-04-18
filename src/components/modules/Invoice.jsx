@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import MasterCodeModal from '../common/MasterCodeModal'
+import ContactSelect from '../common/ContactSelect'
 import { exportInvoicePDF } from '../../utils/pdfExport'
 import toast from 'react-hot-toast'
 
@@ -247,6 +248,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         number: '',
         quotationRef: fromQuotation.number,
         quotationId: fromQuotation.id,
+        accountHeadID: fromQuotation.accountHeadID || '',
         clientName: fromQuotation.clientName || '',
         clientContact: fromQuotation.clientContact || '',
         date: new Date().toISOString().slice(0, 10),
@@ -271,6 +273,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
     return {
       number: '',
       quotationRef: '',
+      accountHeadID: '',
       clientName: '',
       clientContact: '',
       date: new Date().toISOString().slice(0, 10),
@@ -335,11 +338,23 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         <div className="form-grid form-grid-3">
           <div className="input-group">
             <label className="input-label">Client Name *</label>
-            <input className="input" value={form.clientName} onChange={e => setField('clientName', e.target.value)}
-              list="inv-client-list" placeholder="Client name" />
-            <datalist id="inv-client-list">
-              {(data.users?.clients || []).map(c => <option key={c.id} value={c.name} />)}
-            </datalist>
+            <ContactSelect
+              type="client"
+              value={form.clientName}
+              onChange={(name, contact) => {
+                setField('clientName', name)
+                if (contact) setField('accountHeadID', contact.accountHeadID || '')
+              }}
+              onContactSelect={contact => {
+                if (contact?.phone) setField('clientContact', contact.phone)
+              }}
+              placeholder="Search or type client name..."
+            />
+            {form.accountHeadID && (
+              <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 4, fontFamily: 'monospace' }}>
+                Account: {form.accountHeadID}
+              </div>
+            )}
           </div>
           <div className="input-group">
             <label className="input-label">Contact</label>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import MasterCodeModal from '../common/MasterCodeModal'
+import ContactSelect from '../common/ContactSelect'
 import { exportDayBookExcel } from '../../utils/excelExport'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
@@ -78,6 +79,7 @@ function DayBook() {
     date: new Date().toISOString().slice(0, 10),
     type: 'income', description: '', debit: '', credit: '',
     wallet: 'Cash', reference: '', category: '',
+    partyName: '', accountHeadID: '',
   })
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch] = useState('')
@@ -98,7 +100,7 @@ function DayBook() {
     if (!form.description) { toast.error('Description required.'); return }
     if (!form.debit && !form.credit) { toast.error('Enter debit or credit amount.'); return }
     addRecord('dayBook', { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 })
-    setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '' }))
+    setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '', partyName: '', accountHeadID: '' }))
     toast.success('Entry added!')
   }
 
@@ -131,6 +133,23 @@ function DayBook() {
           <div className="input-group col-span-2">
             <label className="input-label">Description *</label>
             <input className="input" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Payment received from / paid to..." spellCheck />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Party / Account</label>
+            <ContactSelect
+              value={form.partyName}
+              onChange={(name, contact) => {
+                setField('partyName', name)
+                if (contact) setField('accountHeadID', contact.accountHeadID || '')
+                else setField('accountHeadID', '')
+              }}
+              placeholder="Search contact (optional)..."
+            />
+            {form.accountHeadID && (
+              <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 3, fontFamily: 'monospace' }}>
+                {form.accountHeadID}
+              </div>
+            )}
           </div>
           <div className="input-group">
             <label className="input-label">Reference</label>
@@ -177,15 +196,23 @@ function DayBook() {
       <div className="table-wrapper">
         <table>
           <thead>
-            <tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th>Wallet</th><th className="text-red">Debit</th><th className="text-green">Credit</th><th></th></tr>
+            <tr><th>Date</th><th>Type</th><th>Description</th><th>Party</th><th>Reference</th><th>Wallet</th><th className="text-red">Debit</th><th className="text-green">Credit</th><th></th></tr>
           </thead>
           <tbody>
-            {entries.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>No entries yet.</td></tr>}
+            {entries.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>No entries yet.</td></tr>}
             {entries.map(e => (
               <tr key={e.id}>
                 <td style={{ fontSize: 12 }}>{e.date}</td>
                 <td><span className="badge badge-draft" style={{ fontSize: 10, textTransform: 'capitalize' }}>{e.type}</span></td>
                 <td>{e.description}</td>
+                <td style={{ fontSize: 12 }}>
+                  {e.partyName ? (
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{e.partyName}</div>
+                      {e.accountHeadID && <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{e.accountHeadID}</div>}
+                    </div>
+                  ) : '—'}
+                </td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{e.reference || '—'}</td>
                 <td style={{ fontSize: 12 }}>{e.wallet}</td>
                 <td className="text-red bold">{e.debit ? `PKR ${Number(e.debit).toLocaleString()}` : '—'}</td>
