@@ -18,7 +18,23 @@
       "Bash(ls \"C:/Users/Tajmmul/OneDrive/Documents/claude ai/tat erp/node_modules/.bin/vite\"*)",
       "Bash(gh auth:*)",
       "Bash(git --version)",
-      "Bash(ls /c/Users/Tajmmul/Downloads/*tataheer* /c/Users/Tajmmul/Downloads/*TAT* /c/Users/Tajmmul/Downloads/*logo* /c/Users/Tajmmul/Downloads/*tat*)"
+      "Bash(ls /c/Users/Tajmmul/Downloads/*tataheer* /c/Users/Tajmmul/Downloads/*TAT* /c/Users/Tajmmul/Downloads/*logo* /c/Users/Tajmmul/Downloads/*tat*)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" \"/c/Program Files/nodejs/node_modules/npm/bin/npm-cli.js\" install cors dotenv)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" -e \"import\\('dotenv/config'\\).then\\(\\(\\) => import\\('./server.js'\\)\\)\")",
+      "Bash(nslookup cluster0.5msxs6f.mongodb.net)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" --input-type=module)",
+      "Bash(2>&1)",
+      "Bash(nslookup -type=SRV _mongodb._tcp.cluster0.5msxs6f.mongodb.net 8.8.8.8)",
+      "Bash(nslookup -type=TXT cluster0.5msxs6f.mongodb.net 8.8.8.8)",
+      "Bash(nslookup -type=SRV _mongodb._tcp.cluster0.81sd6by.mongodb.net 8.8.8.8)",
+      "Bash(nslookup -type=TXT cluster0.81sd6by.mongodb.net 8.8.8.8)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" server.js)",
+      "Bash(PORT=5000 \"/c/Program Files/nodejs/node.exe\" server.js)",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I{} taskkill //PID {} //F)",
+      "Bash(curl -s http://localhost:5000/api/health)",
+      "Bash(curl -s http://localhost:5000/api/data)"
     ]
   }
 }
