@@ -137,10 +137,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
       </div>
 
       <div className="section-box">
-        <div className="section-title" style={{ justifyContent: 'space-between' }}>
-          <span>📦 Items</span>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add Item</button>
-        </div>
+        <div className="section-title">📦 Items</div>
         {form.items.map((item, idx) => {
           const qty = item.useMatrix ? calcMatrixTotal(item.matrixRows) : (parseInt(item.qty) || 0)
           return (
@@ -184,6 +181,9 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
             </div>
           )
         })}
+        <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ width: '100%', marginBottom: 14 }}>
+          + Add Item
+        </button>
         <div className="input-group">
           <label className="input-label">General Notes</label>
           <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />

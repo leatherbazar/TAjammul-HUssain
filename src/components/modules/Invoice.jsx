@@ -434,14 +434,11 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
       {/* Items Table — fully inline editable */}
       <div className="section-box">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div className="section-title" style={{ marginBottom: 0 }}>
-            📦 Line Items
-            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 10 }}>
-              — Qty (blue) and Price (amber) cells are editable
-            </span>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={addBlankRow}>+ Add Row</button>
+        <div className="section-title" style={{ marginBottom: 12 }}>
+          📦 Line Items
+          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 10 }}>
+            — Qty (blue) and Price (amber) cells are editable
+          </span>
         </div>
 
         {/* Desktop table */}
