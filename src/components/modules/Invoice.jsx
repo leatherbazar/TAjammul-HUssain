@@ -69,7 +69,37 @@ function RemainingQtyCard({ invoice, deliveryNotes }) {
   )
 }
 
-// ─── Inline Editable Row ─────────────────────────────────────────────────────
+// ─── Shared qty/price inputs ─────────────────────────────────────────────────
+function QtyInput({ value, onChange, onBlur, style = {} }) {
+  return (
+    <input
+      type="text" inputMode="decimal" className="input input-qty-cell"
+      style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', textAlign: 'center', color: 'var(--blue)', fontWeight: 900, ...style }}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onBlur={e => onBlur(calcExpr(e.target.value))}
+      placeholder="0"
+    />
+  )
+}
+
+function PriceInput({ value, onChange, onBlur, style = {} }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-muted)', pointerEvents: 'none', zIndex: 1 }}>PKR</span>
+      <input
+        type="text" inputMode="decimal" className="input input-price-cell"
+        style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)', paddingLeft: 34, color: 'var(--amber)', fontWeight: 900, width: '100%', ...style }}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => onBlur(calcExpr(e.target.value))}
+        placeholder="0"
+      />
+    </div>
+  )
+}
+
+// ─── Inline Editable Row (desktop table) ────────────────────────────────────
 function ItemRow({ item, index, onChange, onDelete }) {
   const amount = (parseInt(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)
   return (
@@ -88,33 +118,10 @@ function ItemRow({ item, index, onChange, onDelete }) {
         />
       </td>
       <td style={{ width: 95 }}>
-        <input
-          type="text"
-          inputMode="decimal"
-          className="input"
-          style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', padding: '6px 8px', width: 82, textAlign: 'center', color: 'var(--blue)', fontWeight: 800, fontSize: 14 }}
-          value={item.qty}
-          onChange={e => onChange('qty', e.target.value)}
-          onBlur={e => onChange('qty', calcExpr(e.target.value))}
-          title="Type number or formula e.g. 10+5"
-          placeholder="0"
-        />
+        <QtyInput value={item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)} style={{ width: 82, padding: '6px 8px' }} />
       </td>
       <td style={{ width: 135 }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-muted)', pointerEvents: 'none' }}>PKR</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            className="input"
-            style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)', padding: '6px 8px 6px 34px', width: '100%', color: 'var(--amber)', fontWeight: 800, fontSize: 14 }}
-            value={item.unitPrice}
-            onChange={e => onChange('unitPrice', e.target.value)}
-            onBlur={e => onChange('unitPrice', calcExpr(e.target.value))}
-            title="Type number or formula e.g. 100-25"
-            placeholder="0"
-          />
-        </div>
+        <PriceInput value={item.unitPrice} onChange={v => onChange('unitPrice', v)} onBlur={v => onChange('unitPrice', v)} style={{ padding: '6px 8px 6px 34px' }} />
       </td>
       <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--green)', paddingRight: 12, whiteSpace: 'nowrap', fontSize: 13 }}>
         PKR {amount.toLocaleString()}
@@ -123,6 +130,39 @@ function ItemRow({ item, index, onChange, onDelete }) {
         <button className="btn btn-danger btn-xs" onClick={onDelete} title="Remove row" style={{ padding: '3px 8px' }}>✕</button>
       </td>
     </tr>
+  )
+}
+
+// ─── Mobile Card (stacked layout) ───────────────────────────────────────────
+function ItemCard({ item, index, onChange, onDelete }) {
+  const amount = (parseInt(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)
+  return (
+    <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>Item {index + 1}</span>
+        <button className="btn btn-danger btn-xs" onClick={onDelete} style={{ padding: '4px 10px' }}>✕ Remove</button>
+      </div>
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Description</label>
+        <input className="input" value={item.description} onChange={e => onChange('description', e.target.value)}
+          placeholder="Item description" spellCheck style={{ fontSize: 16 }} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+        <div className="input-group">
+          <label className="input-label" style={{ color: 'var(--blue)', fontWeight: 700 }}>QTY ✏️</label>
+          <QtyInput value={item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)}
+            style={{ padding: '12px 10px', fontSize: 20, width: '100%' }} />
+        </div>
+        <div className="input-group">
+          <label className="input-label" style={{ color: 'var(--amber)', fontWeight: 700 }}>UNIT PRICE ✏️</label>
+          <PriceInput value={item.unitPrice} onChange={v => onChange('unitPrice', v)} onBlur={v => onChange('unitPrice', v)}
+            style={{ padding: '12px 10px 12px 34px', fontSize: 20 }} />
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', fontWeight: 900, color: 'var(--green)', fontSize: 16 }}>
+        Amount: PKR {amount.toLocaleString()}
+      </div>
+    </div>
   )
 }
 
@@ -404,7 +444,8 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           <button className="btn btn-secondary btn-sm" onClick={addBlankRow}>+ Add Row</button>
         </div>
 
-        <div className="table-wrapper">
+        {/* Desktop table */}
+        <div className="table-wrapper invoice-items-table">
           <table style={{ minWidth: 560 }}>
             <thead>
               <tr>
@@ -440,6 +481,25 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile card layout (hidden on desktop via CSS) */}
+        <div className="invoice-items-cards" style={{ display: 'none' }}>
+          {form.items.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No items — tap "+ Add Row"</div>
+          )}
+          {form.items.map((item, idx) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              index={idx}
+              onChange={(field, value) => updateItem(item.id, field, value)}
+              onDelete={() => deleteRow(item.id)}
+            />
+          ))}
+          <button className="btn btn-secondary btn-sm" onClick={addBlankRow} style={{ width: '100%', marginTop: 4 }}>
+            + Add Item
+          </button>
         </div>
 
         {/* Tax & Totals */}

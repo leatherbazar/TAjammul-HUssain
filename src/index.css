@@ -779,3 +779,31 @@ tr:hover td { background: rgba(255,255,255,0.02); }
   .main-content { padding: 8px; }
   th, td { padding: 6px 8px; font-size: 11px; }
 }
+
+/* ═══════════════════════════════════════════════
+   INVOICE / DELIVERY NOTE — MOBILE ITEM ROWS
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Prevent iOS auto-zoom on all inputs */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Invoice item rows: switch from table to card stack */
+  .invoice-items-table { display: none; }
+  .invoice-items-cards { display: flex !important; flex-direction: column; gap: 12px; }
+
+  /* Bigger tap targets for qty/price fields */
+  .input-qty-cell,
+  .input-price-cell {
+    font-size: 18px !important;
+    padding: 12px 10px !important;
+    min-height: 48px !important;
+    font-weight: 900 !important;
+  }
+
+  /* Delivery note qty */
+  .dn-qty-input {
+    font-size: 18px !important;
+    padding: 12px 10px !important;
+    min-height: 48px !important;
+  }
+}
