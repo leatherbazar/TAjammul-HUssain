@@ -281,6 +281,125 @@ export async function exportSupplyOrderPDF(order) {
   doc.save(`SupplyOrder-${order.number || 'SO'}.pdf`)
 }
 
+export async function exportDayBookPDF(entries, dateRange) {
+  const doc = new jsPDF()
+  const title = dateRange ? `DAY BOOK  (${dateRange})` : 'DAY BOOK'
+  await addHeader(doc, title, 'STATEMENT', new Date().toLocaleDateString())
+
+  const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
+  const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
+  const net = totalCredit - totalDebit
+
+  autoTable(doc, {
+    startY: 50,
+    head: [['Date', 'Type', 'Description', 'Party', 'Reference', 'Wallet', 'Debit (Dr)', 'Credit (Cr)']],
+    body: entries.map(e => [
+      e.date || '',
+      (e.type || '').replace(/-/g, ' '),
+      e.description || '',
+      e.partyName || '—',
+      e.reference  || '—',
+      e.wallet     || '',
+      e.debit  ? `PKR ${Number(e.debit ).toLocaleString()}` : '—',
+      e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—',
+    ]),
+    theme: 'striped',
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
+    columnStyles: {
+      6: { halign: 'right', textColor: [180, 30, 30] },
+      7: { halign: 'right', textColor: [20, 130, 60] },
+    },
+  })
+
+  const finalY = doc.lastAutoTable.finalY + 8
+  autoTable(doc, {
+    startY: finalY,
+    body: [
+      ['Total Debit',  `PKR ${totalDebit .toLocaleString()}`],
+      ['Total Credit', `PKR ${totalCredit.toLocaleString()}`],
+      ['Net Balance',  `PKR ${Math.abs(net).toLocaleString()}  ${net >= 0 ? '(CR)' : '(DR)'}`],
+    ],
+    theme: 'plain',
+    columnStyles: { 0: { halign: 'right', fontStyle: 'bold' }, 1: { halign: 'right' } },
+    tableWidth: 90,
+    margin: { left: 110 },
+    bodyStyles: { fontSize: 9 },
+  })
+
+  addFooter(doc)
+  doc.save(`DayBook-${new Date().toISOString().slice(0,10)}.pdf`)
+}
+
+export async function exportLedgerPDF(contact, entries) {
+  const doc = new jsPDF()
+  const label = contact.accountHeadID ? `${contact.accountHeadID}` : 'ACC'
+  await addHeader(doc, 'ACCOUNT STATEMENT', label, new Date().toLocaleDateString())
+
+  let y = 50
+  // Contact info box
+  doc.setFillColor(240, 240, 245)
+  doc.roundedRect(12, y, 186, 20, 2, 2, 'F')
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(40, 40, 40)
+  doc.text(contact.name || '—', 16, y + 7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(80, 80, 80)
+  const details = [contact.phone, contact.email, contact.address].filter(Boolean).join('   |   ')
+  if (details) doc.text(details, 16, y + 13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(40, 40, 100)
+  doc.text(`Account ID: ${contact.accountHeadID || '—'}   Type: ${(contact.type || '').toUpperCase()}`, 130, y + 7)
+  y += 26
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Date', 'Description', 'Document Ref', 'Type', 'Debit (Dr)', 'Credit (Cr)', 'Balance']],
+    body: entries.map(e => [
+      e.date || (e.createdAt || '').slice(0, 10) || '',
+      e.description || '',
+      e.documentRef  || '—',
+      (e.documentType || 'manual'),
+      e.debit  ? `PKR ${Number(e.debit ).toLocaleString()}` : '—',
+      e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—',
+      `PKR ${Number(e.balance || 0).toLocaleString()}`,
+    ]),
+    theme: 'striped',
+    headStyles,
+    bodyStyles,
+    alternateRowStyles: altStyles,
+    columnStyles: {
+      4: { halign: 'right', textColor: [180, 30, 30] },
+      5: { halign: 'right', textColor: [20, 130, 60] },
+      6: { halign: 'right', fontStyle: 'bold' },
+    },
+  })
+
+  const finalY = doc.lastAutoTable.finalY + 8
+  const totalDebit  = entries.reduce((s, e) => s + (e.debit  || 0), 0)
+  const totalCredit = entries.reduce((s, e) => s + (e.credit || 0), 0)
+  const balance     = contact.currentBalance || 0
+
+  autoTable(doc, {
+    startY: finalY,
+    body: [
+      ['Total Debit',      `PKR ${totalDebit .toLocaleString()}`],
+      ['Total Credit',     `PKR ${totalCredit.toLocaleString()}`],
+      ['Closing Balance',  `PKR ${Math.abs(balance).toLocaleString()}  ${balance >= 0 ? '(Dr)' : '(Cr)'}`],
+    ],
+    theme: 'plain',
+    columnStyles: { 0: { halign: 'right', fontStyle: 'bold' }, 1: { halign: 'right' } },
+    tableWidth: 90,
+    margin: { left: 110 },
+    bodyStyles: { fontSize: 9 },
+  })
+
+  addFooter(doc)
+  doc.save(`Ledger-${contact.accountHeadID || contact.name}-${new Date().toISOString().slice(0,10)}.pdf`)
+}
+
 export async function exportDeliveryNotePDF(note) {
   const doc = new jsPDF()
   await addHeader(doc, 'DELIVERY NOTE', note.number, note.date)

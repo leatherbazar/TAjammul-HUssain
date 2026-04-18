@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportDayBookExcel } from '../../utils/excelExport'
+import { exportDayBookPDF } from '../../utils/pdfExport'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
 
@@ -108,7 +109,10 @@ function DayBook() {
     <div className="section-box">
       <div className="section-title" style={{ justifyContent: 'space-between' }}>
         <span>📒 Day Book</span>
-        <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookExcel(data.dayBook || [])}>📊 Export</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookPDF(entries)}>🖨️ PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookExcel(data.dayBook || [])}>📊 Excel</button>
+        </div>
       </div>
 
       {/* Add Entry */}

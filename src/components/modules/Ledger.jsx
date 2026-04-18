@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { exportLedgerPDF } from '../../utils/pdfExport'
 
 const TYPE_COLORS = {
   client: 'var(--green)',
@@ -68,7 +69,14 @@ export default function Ledger() {
       <div className="fade-in">
         <div className="page-header">
           <h2>📗 <span>Account Statement</span></h2>
-          <button className="btn btn-secondary btn-sm" onClick={() => setSelected(null)}>← Back to Ledger</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary btn-sm"
+              onClick={() => exportLedgerPDF(contact, entries)}
+              style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
+              🖨️ Print PDF
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setSelected(null)}>← Back</button>
+          </div>
         </div>
 
         {/* Contact Header */}
