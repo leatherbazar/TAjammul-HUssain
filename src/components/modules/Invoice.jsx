@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportInvoicePDF } from '../../utils/pdfExport'
+import { calcExpr } from '../../utils/calcExpr'
 import toast from 'react-hot-toast'
 
 const TAX_OPTIONS = [
@@ -88,26 +89,30 @@ function ItemRow({ item, index, onChange, onDelete }) {
       </td>
       <td style={{ width: 95 }}>
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           className="input"
           style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', padding: '6px 8px', width: 82, textAlign: 'center', color: 'var(--blue)', fontWeight: 800, fontSize: 14 }}
           value={item.qty}
-          min="0"
           onChange={e => onChange('qty', e.target.value)}
-          title="Click to edit quantity"
+          onBlur={e => onChange('qty', calcExpr(e.target.value))}
+          title="Type number or formula e.g. 10+5"
+          placeholder="0"
         />
       </td>
       <td style={{ width: 135 }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-muted)', pointerEvents: 'none' }}>PKR</span>
           <input
-            type="number"
+            type="text"
+            inputMode="decimal"
             className="input"
             style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)', padding: '6px 8px 6px 34px', width: '100%', color: 'var(--amber)', fontWeight: 800, fontSize: 14 }}
             value={item.unitPrice}
-            min="0"
             onChange={e => onChange('unitPrice', e.target.value)}
-            title="Click to edit price"
+            onBlur={e => onChange('unitPrice', calcExpr(e.target.value))}
+            title="Type number or formula e.g. 100-25"
+            placeholder="0"
           />
         </div>
       </td>

@@ -4,6 +4,7 @@ import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportDeliveryNotePDF } from '../../utils/pdfExport'
+import { calcExpr } from '../../utils/calcExpr'
 import toast from 'react-hot-toast'
 
 function DeliveryNoteForm({ initial, onSave, onCancel }) {
@@ -98,8 +99,11 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
                 <div className="input-group">
                   <label className="input-label">Qty {item.useMatrix ? '(auto)' : ''}</label>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="number" className="input" min="0" value={item.useMatrix ? qty : item.qty}
-                      onChange={e => updateItem(item.id, 'qty', e.target.value)} disabled={item.useMatrix} />
+                    <input type="text" inputMode="decimal" className="input" placeholder="0 or 10+5"
+                      value={item.useMatrix ? qty : item.qty}
+                      onChange={e => updateItem(item.id, 'qty', e.target.value)}
+                      onBlur={e => updateItem(item.id, 'qty', calcExpr(e.target.value))}
+                      disabled={item.useMatrix} />
                     <button className={`btn btn-xs ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
                       onClick={() => updateItem(item.id, 'useMatrix', !item.useMatrix)}>
                       🎨

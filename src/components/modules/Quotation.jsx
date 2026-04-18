@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
+import { calcExpr } from '../../utils/calcExpr'
 import ContactSelect from '../common/ContactSelect'
 import { exportQuotationPDF } from '../../utils/pdfExport'
 import { exportQuotationExcel } from '../../utils/excelExport'
@@ -98,14 +99,19 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
                     onChange={e => updateItem(item.id, 'color', e.target.value)} disabled={item.useMatrix} />
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Qty {item.useMatrix ? '(auto)' : ''}</label>
-                  <input type="number" className="input" min="0" value={item.useMatrix ? qty : item.qty}
-                    onChange={e => updateItem(item.id, 'qty', e.target.value)} disabled={item.useMatrix} />
+                  <label className="input-label">Qty {item.useMatrix ? '(auto)' : '✏️ e.g. 10+5'}</label>
+                  <input type="text" inputMode="decimal" className="input" placeholder="0"
+                    value={item.useMatrix ? qty : item.qty}
+                    onChange={e => updateItem(item.id, 'qty', e.target.value)}
+                    onBlur={e => updateItem(item.id, 'qty', calcExpr(e.target.value))}
+                    disabled={item.useMatrix} />
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Unit Price (PKR)</label>
-                  <input type="number" className="input" min="0" placeholder="0.00" value={item.unitPrice}
-                    onChange={e => updateItem(item.id, 'unitPrice', e.target.value)} />
+                  <label className="input-label">Unit Price (PKR) ✏️ e.g. 100-25</label>
+                  <input type="text" inputMode="decimal" className="input" placeholder="0.00"
+                    value={item.unitPrice}
+                    onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
+                    onBlur={e => updateItem(item.id, 'unitPrice', calcExpr(e.target.value))} />
                 </div>
                 <div className="input-group" style={{ justifyContent: 'flex-end', alignItems: 'flex-end' }}>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
