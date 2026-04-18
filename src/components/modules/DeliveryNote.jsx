@@ -11,6 +11,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
   const { data } = useApp()
   const [form, setForm] = useState(initial || {
     clientName: '', clientContact: '', accountHeadID: '', deliveryAddress: '',
+    invoiceRef: '',
     date: new Date().toISOString().slice(0, 10),
     driverName: '', vehicleNo: '',
     items: [{ id: Date.now(), description: '', color: '', useMatrix: false, matrixRows: [], qty: 1, note: '' }],
@@ -23,8 +24,65 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
   const updateItem = (id, k, v) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, [k]: v } : i) }))
   const updateMatrix = (id, rows) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, matrixRows: rows } : i) }))
 
+  // Load data from an invoice
+  const loadFromInvoice = (invoiceId) => {
+    if (!invoiceId) return
+    const inv = (data.invoices || []).find(i => i.id === invoiceId)
+    if (!inv) return
+    setForm(f => ({
+      ...f,
+      invoiceRef: inv.number || invoiceId,
+      clientName: inv.clientName || '',
+      clientContact: inv.clientContact || '',
+      accountHeadID: inv.accountHeadID || '',
+      items: (inv.items || []).map(i => ({
+        id: Date.now() + Math.random(),
+        description: i.description || '',
+        color: i.color || '',
+        useMatrix: false,
+        matrixRows: [],
+        qty: parseInt(i.qty) || 1,
+        note: '',
+      })),
+    }))
+    toast.success(`Loaded from Invoice ${inv.number}`)
+  }
+
+  const invoices = data.invoices || []
+
   return (
     <div>
+      {/* Load from Invoice banner */}
+      {!initial && invoices.length > 0 && (
+        <div style={{
+          marginBottom: 14, padding: '12px 16px', borderRadius: 10,
+          background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
+        }}>
+          <span style={{ fontSize: 13, color: 'var(--blue)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            📋 Load from Invoice:
+          </span>
+          <select
+            className="input"
+            style={{ maxWidth: 320, flex: 1 }}
+            defaultValue=""
+            onChange={e => { loadFromInvoice(e.target.value); e.target.value = '' }}
+          >
+            <option value="">— Select invoice to auto-fill —</option>
+            {[...invoices].sort((a, b) => (b.number || '').localeCompare(a.number || '')).map(inv => (
+              <option key={inv.id} value={inv.id}>
+                {inv.number} — {inv.clientName} ({inv.date})
+              </option>
+            ))}
+          </select>
+          {form.invoiceRef && (
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--green)', background: 'rgba(34,197,94,0.1)', padding: '3px 10px', borderRadius: 6 }}>
+              ✓ Ref: {form.invoiceRef}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="section-box">
         <div className="section-title">🚚 Delivery Details</div>
         <div className="form-grid form-grid-3">
@@ -41,7 +99,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
                 if (c?.phone) setField('clientContact', c.phone)
                 if (c?.address) setField('deliveryAddress', c.address)
               }}
-              placeholder="Search client..."
+              placeholder="Search client or load from invoice above..."
             />
             {form.accountHeadID && (
               <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 3, fontFamily: 'monospace' }}>
