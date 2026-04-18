@@ -2,13 +2,14 @@ import React, { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
+import ContactSelect from '../common/ContactSelect'
 import { exportDeliveryNotePDF } from '../../utils/pdfExport'
 import toast from 'react-hot-toast'
 
 function DeliveryNoteForm({ initial, onSave, onCancel }) {
   const { data } = useApp()
   const [form, setForm] = useState(initial || {
-    clientName: '', clientContact: '', deliveryAddress: '',
+    clientName: '', clientContact: '', accountHeadID: '', deliveryAddress: '',
     date: new Date().toISOString().slice(0, 10),
     driverName: '', vehicleNo: '',
     items: [{ id: Date.now(), description: '', color: '', useMatrix: false, matrixRows: [], qty: 1, note: '' }],
@@ -28,8 +29,24 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
         <div className="form-grid form-grid-3">
           <div className="input-group">
             <label className="input-label">Client Name *</label>
-            <input className="input" value={form.clientName} onChange={e => setField('clientName', e.target.value)} list="dn-clients" />
-            <datalist id="dn-clients">{(data.users?.clients || []).map(c => <option key={c.id} value={c.name} />)}</datalist>
+            <ContactSelect
+              type="client"
+              value={form.clientName}
+              onChange={(name, contact) => {
+                setField('clientName', name)
+                if (contact) setField('accountHeadID', contact.accountHeadID || '')
+              }}
+              onContactSelect={c => {
+                if (c?.phone) setField('clientContact', c.phone)
+                if (c?.address) setField('deliveryAddress', c.address)
+              }}
+              placeholder="Search client..."
+            />
+            {form.accountHeadID && (
+              <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 3, fontFamily: 'monospace' }}>
+                {form.accountHeadID}
+              </div>
+            )}
           </div>
           <div className="input-group">
             <label className="input-label">Contact</label>

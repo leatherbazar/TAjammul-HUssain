@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser }) {
   const { data } = useApp()
   const [form, setForm] = useState(initial || {
-    title: '', supplierName: '', supplierContact: '',
+    title: '', supplierName: '', supplierContact: '', accountHeadID: '',
     date: new Date().toISOString().slice(0, 10),
     assignedTo: isEmployee ? currentUser?.id : '',
     items: [{ id: Date.now(), description: '', color: '', qty: 1, marketPrice: 0, useMatrix: false, matrixRows: [], note: '' }],
@@ -47,10 +47,20 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                 <ContactSelect
                   type="supplier"
                   value={form.supplierName}
-                  onChange={(name) => setField('supplierName', name)}
-                  onContactSelect={(c) => setField('supplierContact', c.phone || form.supplierContact)}
+                  onChange={(name, contact) => {
+                    setField('supplierName', name)
+                    if (contact) setField('accountHeadID', contact.accountHeadID || '')
+                  }}
+                  onContactSelect={(c) => {
+                    if (c?.phone) setField('supplierContact', c.phone)
+                  }}
                   placeholder="Select or type supplier..."
                 />
+                {form.accountHeadID && (
+                  <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 3, fontFamily: 'monospace' }}>
+                    {form.accountHeadID}
+                  </div>
+                )}
               </div>
               <div className="input-group">
                 <label className="input-label">Supplier Contact</label>

@@ -395,21 +395,20 @@ app.post('/api/dayBook', async (req, res) => {
   try {
     const doc = await models.dayBook.create(req.body)
 
-    // ── LEDGER TRIGGER for payment receipts ───────────────────────────────────
-    if (req.body.accountHeadID && req.body.amount > 0) {
-      const isReceipt = ['receipt', 'payment_received', 'credit'].includes(req.body.entryType)
-      const isPayment = ['payment', 'payment_made', 'debit'].includes(req.body.entryType)
-
-      if (isReceipt || isPayment) {
+    // ── LEDGER TRIGGER — fires whenever a party account is linked ─────────────
+    if (req.body.accountHeadID) {
+      const debit  = parseFloat(req.body.debit)  || 0
+      const credit = parseFloat(req.body.credit) || 0
+      if (debit > 0 || credit > 0) {
         await postLedgerEntry({
           accountHeadID: req.body.accountHeadID,
           contactName:   req.body.partyName || req.body.description,
           date:          req.body.date,
           description:   req.body.description || 'Day Book Entry',
-          documentRef:   req.body.reference || doc.id,
+          documentRef:   req.body.reference  || doc.id,
           documentType:  'daybook',
-          debit:         isPayment ? parseFloat(req.body.amount) : 0,
-          credit:        isReceipt ? parseFloat(req.body.amount) : 0,
+          debit,
+          credit,
         })
       }
     }
@@ -470,7 +469,31 @@ app.get('/api/data', async (req, res) => {
 //  GENERIC COLLECTION CRUD  (for remaining collections)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-OTHER_COLLECTIONS.filter(n => n !== 'dayBook').forEach(name => {
+// ── Supply Order — with ledger trigger (supplier debit when order placed) ──────
+app.post('/api/supplyOrders', async (req, res) => {
+  try {
+    const doc = await models.supplyOrders.create(req.body)
+    if (req.body.accountHeadID) {
+      const totalAmount = (req.body.items || []).reduce((s, i) =>
+        s + (parseInt(i.qty) || 0) * (parseFloat(i.marketPrice) || 0), 0)
+      if (totalAmount > 0) {
+        await postLedgerEntry({
+          accountHeadID: req.body.accountHeadID,
+          contactName:   req.body.supplierName,
+          date:          req.body.date,
+          description:   `Supply Order: ${req.body.title || req.body.number || ''}`,
+          documentRef:   req.body.number || doc.id,
+          documentType:  'manual',
+          debit:         totalAmount, // we ordered, supplier to deliver
+          credit:        0,
+        })
+      }
+    }
+    res.json(fmt(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+OTHER_COLLECTIONS.filter(n => n !== 'dayBook' && n !== 'supplyOrders').forEach(name => {
   app.post(`/api/${name}`, async (req, res) => {
     try { res.json(fmt(await models[name].create(req.body))) }
     catch (err) { res.status(500).json({ error: err.message }) }
