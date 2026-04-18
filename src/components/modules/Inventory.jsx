@@ -44,9 +44,18 @@ function ItemForm({ initial, onSave, onCancel }) {
           </div>
           <div className="input-group">
             <label className="input-label">Unit</label>
-            <select className="input" value={form.unit} onChange={e => setField('unit', e.target.value)}>
-              {['pcs', 'meters', 'kg', 'pairs', 'sets', 'dozen'].map(u => <option key={u}>{u}</option>)}
-            </select>
+            <input
+              className="input"
+              list="unit-list"
+              value={form.unit}
+              onChange={e => setField('unit', e.target.value)}
+              placeholder="pcs, sqt, meters..."
+            />
+            <datalist id="unit-list">
+              {['pcs', 'sqt', 'meters', 'kg', 'pairs', 'sets', 'dozen', 'yards', 'rolls', 'boxes'].map(u => (
+                <option key={u} value={u} />
+              ))}
+            </datalist>
           </div>
           <div className="input-group">
             <label className="input-label">Cost Price (PKR)</label>
