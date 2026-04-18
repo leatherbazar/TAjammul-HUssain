@@ -704,3 +704,78 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .bold { font-weight: 700; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════
+   MOBILE RESPONSIVE  (max-width: 768px)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  body { font-size: 13px; }
+
+  /* Layout */
+  .app-layout { display: block; }
+  .main-content { width: 100%; padding: 12px; }
+
+  /* Sidebar — slide in from left */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    z-index: 300;
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+
+  /* Overlay behind sidebar */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    z-index: 299;
+    animation: fadeIn 0.2s ease;
+  }
+
+  /* Navbar */
+  .navbar { padding: 8px 10px; gap: 8px; }
+  .navbar-brand-text { display: none; }
+  .logo-img { height: 36px !important; }
+  .navbar-user .role-badge { display: none; }
+
+  /* Tables — horizontal scroll */
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 540px; }
+
+  /* Cards stack */
+  .stat-cards { grid-template-columns: 1fr 1fr; }
+  .wallet-cards { grid-template-columns: 1fr 1fr; }
+
+  /* Form grids collapse */
+  .form-grid-2,
+  .form-grid-3 { grid-template-columns: 1fr; }
+  [class*="col-span"] { grid-column: span 1; }
+
+  /* Tabs scroll horizontally */
+  .tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Page header */
+  .page-header { flex-wrap: wrap; gap: 8px; }
+  .page-header h2 { font-size: 16px; }
+
+  /* Buttons in forms full width */
+  .form-actions .btn { width: 100%; }
+
+  /* Modal */
+  .modal-content { margin: 12px; padding: 16px; }
+
+  /* Section box */
+  .section-box { padding: 12px; }
+}
+
+@media (max-width: 480px) {
+  .stat-cards { grid-template-columns: 1fr; }
+  .wallet-cards { grid-template-columns: 1fr; }
+  .main-content { padding: 8px; }
+  th, td { padding: 6px 8px; font-size: 11px; }
+}
