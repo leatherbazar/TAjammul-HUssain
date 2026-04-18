@@ -27,10 +27,13 @@ export default function Contacts() {
     setLoading(true)
     try {
       const res = await fetch('/api/contacts')
+      if (!res.ok) { toast.error(`Load error: ${res.status}`); return }
       const data = await res.json()
       setContacts(data.contacts || [])
-    } catch {
-      toast.error('Failed to load contacts')
+    } catch (err) {
+      if (err.message?.includes('Failed to fetch')) toast.error('Server offline — start the backend')
+      else toast.error('Failed to load contacts')
+      console.error('Contacts load error:', err)
     } finally {
       setLoading(false)
     }
@@ -55,7 +58,10 @@ export default function Contacts() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         })
-        if (!res.ok) throw new Error()
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || `Server error ${res.status}`)
+        }
         toast.success('Contact updated!')
       } else {
         const res = await fetch('/api/contacts', {
@@ -64,8 +70,8 @@ export default function Contacts() {
           body: JSON.stringify(form),
         })
         if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'Failed')
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || `Server error ${res.status}`)
         }
         toast.success('Contact added!')
       }
@@ -74,7 +80,12 @@ export default function Contacts() {
       setForm(EMPTY_FORM)
       setEditId(null)
     } catch (err) {
-      toast.error(err.message || 'Save failed')
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        toast.error('Cannot reach server. Is the backend running?')
+      } else {
+        toast.error(err.message || 'Save failed')
+      }
+      console.error('Contact save error:', err)
     }
   }
 
@@ -263,8 +274,8 @@ export default function Contacts() {
 
       {mcModal.open && (
         <MasterCodeModal
-          onVerify={() => { setMcModal({ open: false, action: null }); mcModal.action?.() }}
-          onClose={() => setMcModal({ open: false, action: null })}
+          onSuccess={() => { mcModal.action?.(); setMcModal({ open: false, action: null }) }}
+          onCancel={() => setMcModal({ open: false, action: null })}
         />
       )}
     </div>
