@@ -73,16 +73,20 @@ mongoose.connection.once('open', async () => {
       { $setOnInsert: { value: '5555' } },
       { upsert: true }
     )
-    const adminExists = await User.findOne({ role: 'admin' })
-    if (!adminExists) {
-      await User.create({
-        id: 'admin',
-        username: process.env.ADMIN_USER || 'admin',
-        password: process.env.ADMIN_PASSWORD || 'admin123',
-        name: 'Administrator',
-        role: 'admin'
-      })
-    }
+    // Always sync admin credentials from env vars
+    await User.findOneAndUpdate(
+      { role: 'admin' },
+      {
+        $set: {
+          username: process.env.ADMIN_USER || 'admin',
+          password: process.env.ADMIN_PASSWORD || 'admin123',
+          name: 'Administrator',
+          role: 'admin'
+        },
+        $setOnInsert: { id: 'admin' }
+      },
+      { upsert: true }
+    )
     console.log('✅ Database defaults initialized')
   } catch (err) {
     console.error('Init error:', err)
