@@ -156,7 +156,10 @@ export function AppProvider({ children }) {
         background: 'var(--bg, #0a0a0f)', color: 'var(--text, #e0e0e0)', gap: 18
       }}>
         <div style={{ fontSize: 36 }}>⚙️</div>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>Loading Tataheer ERP...</div>
+        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 1, textAlign: 'center' }}>
+          Welcome to TATAHEER BUSINESS GROUP
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: -10 }}>Loading Tataheer ERP...</div>
         <div style={{
           width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)',
           borderTop: '3px solid #4f8ef7', borderRadius: '50%',
