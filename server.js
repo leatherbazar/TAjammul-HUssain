@@ -47,13 +47,73 @@ const LedgerSchema = new mongoose.Schema({
   date:          String,
   description:   String,
   documentRef:   String,  // e.g. INV-201, QT-005
-  documentType:  { type: String, enum: ['invoice', 'quotation', 'daybook', 'advance', 'payment', 'manual'] },
+  documentType:  { type: String, enum: ['invoice', 'quotation', 'daybook', 'advance', 'payment', 'purchase', 'sale', 'manual'] },
   debit:         { type: Number, default: 0 }, // client owes us / we owe supplier
   credit:        { type: Number, default: 0 }, // payment received / we paid supplier
   balance:       { type: Number, default: 0 }, // running balance after this entry
 }, { timestamps: true })
 
 const Ledger = mongoose.model('Ledger', LedgerSchema)
+
+// ── Purchase (confirmed inward stock) ─────────────────────────────────────────
+const PurchaseSchema = new mongoose.Schema({
+  id:                { type: String, index: true },
+  number:            { type: String, unique: true, sparse: true },
+  supplyOrderId:     String,
+  supplyOrderNumber: String,
+  supplierName:      String,
+  supplierContact:   String,
+  accountHeadID:     String,
+  date:              String,
+  items:             mongoose.Schema.Types.Mixed, // [{ description, color, qty, unit, costPrice, amount, inventoryId, matrixRows }]
+  totalAmount:       { type: Number, default: 0 },
+  paidAmount:        { type: Number, default: 0 },
+  paymentStatus:     { type: String, enum: ['unpaid', 'partial', 'paid'], default: 'unpaid' },
+  notes:             String,
+  status:            { type: String, enum: ['received', 'partial', 'returned'], default: 'received' },
+}, { timestamps: true })
+const Purchase = mongoose.model('Purchase', PurchaseSchema)
+
+// ── Sale (outward from inventory) ─────────────────────────────────────────────
+const SaleSchema = new mongoose.Schema({
+  id:            { type: String, index: true },
+  number:        { type: String, unique: true, sparse: true },
+  clientName:    String,
+  clientContact: String,
+  accountHeadID: String,
+  invoiceRef:    String,
+  date:          String,
+  items:         mongoose.Schema.Types.Mixed, // [{ inventoryId, description, color, qty, unit, costPrice, salePrice, amount, profit, marginPct }]
+  subtotal:      { type: Number, default: 0 },
+  totalCost:     { type: Number, default: 0 },
+  totalProfit:   { type: Number, default: 0 },
+  taxRate:       { type: Number, default: 0 },
+  taxAmount:     { type: Number, default: 0 },
+  total:         { type: Number, default: 0 },
+  paidAmount:    { type: Number, default: 0 },
+  paymentStatus: { type: String, enum: ['unpaid', 'partial', 'paid'], default: 'unpaid' },
+  notes:         String,
+  status:        { type: String, enum: ['confirmed', 'cancelled', 'returned'], default: 'confirmed' },
+}, { timestamps: true })
+const Sale = mongoose.model('Sale', SaleSchema)
+
+// ── Stock Movement (audit trail of IN / OUT) ──────────────────────────────────
+const StockMovementSchema = new mongoose.Schema({
+  id:           { type: String, index: true },
+  inventoryId:  { type: String, index: true },
+  itemName:     String,
+  date:         String,
+  type:         { type: String, enum: ['IN', 'OUT', 'ADJUSTMENT'] },
+  qty:          Number,
+  unit:         String,
+  color:        String,
+  costPrice:    Number,
+  salePrice:    Number,
+  documentRef:  String,
+  documentType: { type: String, enum: ['purchase', 'sale', 'adjustment', 'return'] },
+  notes:        String,
+}, { timestamps: true })
+const StockMovement = mongoose.model('StockMovement', StockMovementSchema)
 
 // ── Invoice ───────────────────────────────────────────────────────────────────
 const InvoiceSchema = new mongoose.Schema({
@@ -433,6 +493,14 @@ app.get('/api/data', async (req, res) => {
     const invoices = await Invoice.find().sort({ createdAt: -1 }).lean()
     result.invoices = invoices.map(fmtLean)
 
+    // Purchases and Sales from dedicated models
+    const [purchases, sales] = await Promise.all([
+      Purchase.find().sort({ createdAt: -1 }).lean(),
+      Sale.find().sort({ createdAt: -1 }).lean(),
+    ])
+    result.purchases = purchases.map(fmtLean)
+    result.sales     = sales.map(fmtLean)
+
     // Other collections
     for (const name of OTHER_COLLECTIONS) {
       const docs = await models[name].find().sort({ createdAt: -1 }).lean()
@@ -469,27 +537,417 @@ app.get('/api/data', async (req, res) => {
 //  GENERIC COLLECTION CRUD  (for remaining collections)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Supply Order — with ledger trigger (supplier debit when order placed) ──────
+// ── Supply Order — saved as procurement intent; ledger only posts on Purchase confirm ──
 app.post('/api/supplyOrders', async (req, res) => {
   try {
     const doc = await models.supplyOrders.create(req.body)
-    if (req.body.accountHeadID) {
-      const totalAmount = (req.body.items || []).reduce((s, i) =>
-        s + (parseInt(i.qty) || 0) * (parseFloat(i.marketPrice) || 0), 0)
-      if (totalAmount > 0) {
-        await postLedgerEntry({
-          accountHeadID: req.body.accountHeadID,
-          contactName:   req.body.supplierName,
-          date:          req.body.date,
-          description:   `Supply Order: ${req.body.title || req.body.number || ''}`,
-          documentRef:   req.body.number || doc.id,
-          documentType:  'manual',
-          debit:         totalAmount, // we ordered, supplier to deliver
-          credit:        0,
+    res.json(fmt(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PURCHASES  (Inward stock + Supplier AP ledger)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Helper: merge qty into existing inventory or create new item
+async function upsertInventoryItem({ description, color, qty, unit, costPrice, supplierName, matrixRows }) {
+  // Try exact name match first
+  let inv = await models.inventory.findOne({ name: { $regex: `^${description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean()
+  if (inv) {
+    await models.inventory.findOneAndUpdate({ id: inv.id }, { $inc: { qty }, $set: { costPrice, updatedAt: new Date() } })
+    return inv
+  }
+  // Create new
+  const newInv = await models.inventory.create({
+    id: Date.now().toString() + Math.floor(Math.random() * 9999),
+    name: description,
+    color: color || '',
+    category: 'Purchased',
+    sku: `SKU-${Date.now().toString().slice(-6)}`,
+    qty,
+    unit: unit || 'pcs',
+    costPrice,
+    sellPrice: 0,
+    minStock: 0,
+    supplier: supplierName || '',
+    useMatrix: !!(matrixRows && matrixRows.length),
+    matrixRows: matrixRows || [],
+  })
+  return newInv
+}
+
+// Convert Supply Order → Purchase (main "Confirm & Receive" action)
+app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
+  try {
+    const order = await models.supplyOrders.findOne({ id: req.params.soId }).lean()
+    if (!order) return res.status(404).json({ error: 'Supply order not found' })
+    if (order.purchaseRef) return res.status(400).json({ error: 'Already converted to purchase' })
+
+    const count = await Purchase.countDocuments()
+    const number = `PUR-${String(count + 1).padStart(4, '0')}`
+    const purchaseDate = req.body.date || order.date || new Date().toISOString().slice(0, 10)
+
+    let totalAmount = 0
+    const purchaseItems = []
+
+    for (const item of (order.items || [])) {
+      const qty      = parseInt(item.qty) || 0
+      const costPrice = parseFloat(item.marketPrice) || 0
+      const amount   = qty * costPrice
+      totalAmount   += amount
+
+      // Upsert into inventory
+      const inv = await upsertInventoryItem({
+        description:  item.description,
+        color:        item.color || '',
+        qty,
+        unit:         item.unit || 'pcs',
+        costPrice,
+        supplierName: order.supplierName,
+        matrixRows:   item.matrixRows || [],
+      })
+
+      // Stock movement log
+      await StockMovement.create({
+        id: Date.now().toString() + Math.floor(Math.random() * 999),
+        inventoryId:  inv.id,
+        itemName:     item.description,
+        date:         purchaseDate,
+        type:         'IN',
+        qty,
+        unit:         item.unit || 'pcs',
+        color:        item.color || '',
+        costPrice,
+        documentRef:  number,
+        documentType: 'purchase',
+        notes:        `From SO ${order.number}`,
+      })
+
+      purchaseItems.push({
+        description:  item.description,
+        color:        item.color || '',
+        qty,
+        unit:         item.unit || 'pcs',
+        costPrice,
+        amount,
+        inventoryId:  inv.id,
+        matrixRows:   item.matrixRows || [],
+      })
+    }
+
+    // Create Purchase record
+    const purchase = await Purchase.create({
+      id: Date.now().toString(),
+      number,
+      supplyOrderId:     order.id,
+      supplyOrderNumber: order.number,
+      supplierName:      order.supplierName,
+      supplierContact:   order.supplierContact,
+      accountHeadID:     order.accountHeadID,
+      date:              purchaseDate,
+      items:             purchaseItems,
+      totalAmount,
+      paidAmount:        0,
+      paymentStatus:     'unpaid',
+      notes:             req.body.notes || order.notes || '',
+      status:            'received',
+    })
+
+    // Mark supply order as delivered
+    await models.supplyOrders.findOneAndUpdate({ id: req.params.soId }, {
+      $set: { status: 'delivered', purchaseRef: number }
+    })
+
+    // ── SUPPLIER LEDGER: Credit = goods received (AP — we owe supplier) ────────
+    if (order.accountHeadID && totalAmount > 0) {
+      await postLedgerEntry({
+        accountHeadID: order.accountHeadID,
+        contactName:   order.supplierName,
+        date:          purchaseDate,
+        description:   `Purchase Received: ${number} (ref ${order.number})`,
+        documentRef:   number,
+        documentType:  'purchase',
+        debit:         0,
+        credit:        totalAmount,  // credit on supplier = AP increases (we owe them)
+      })
+    }
+
+    res.json({ ok: true, purchase: fmt(purchase) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// List all purchases
+app.get('/api/purchases', async (req, res) => {
+  try {
+    const docs = await Purchase.find().sort({ createdAt: -1 }).lean()
+    res.json(docs.map(fmtLean))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Direct purchase (not from SO)
+app.post('/api/purchases', async (req, res) => {
+  try {
+    const count  = await Purchase.countDocuments()
+    const number = `PUR-${String(count + 1).padStart(4, '0')}`
+    const purchaseDate = req.body.date || new Date().toISOString().slice(0, 10)
+
+    let totalAmount = 0
+    const purchaseItems = []
+
+    for (const item of (req.body.items || [])) {
+      const qty       = parseInt(item.qty) || 0
+      const costPrice = parseFloat(item.costPrice) || 0
+      const amount    = qty * costPrice
+      totalAmount    += amount
+
+      const inv = await upsertInventoryItem({
+        description:  item.description,
+        color:        item.color || '',
+        qty,
+        unit:         item.unit || 'pcs',
+        costPrice,
+        supplierName: req.body.supplierName,
+        matrixRows:   item.matrixRows || [],
+      })
+
+      await StockMovement.create({
+        id: Date.now().toString() + Math.floor(Math.random() * 999),
+        inventoryId:  inv.id,
+        itemName:     item.description,
+        date:         purchaseDate,
+        type:         'IN',
+        qty,
+        unit:         item.unit || 'pcs',
+        color:        item.color || '',
+        costPrice,
+        documentRef:  number,
+        documentType: 'purchase',
+      })
+
+      purchaseItems.push({ ...item, qty, costPrice, amount, inventoryId: inv.id })
+    }
+
+    const purchase = await Purchase.create({
+      ...req.body,
+      id: Date.now().toString(),
+      number,
+      items: purchaseItems,
+      totalAmount,
+    })
+
+    if (req.body.accountHeadID && totalAmount > 0) {
+      await postLedgerEntry({
+        accountHeadID: req.body.accountHeadID,
+        contactName:   req.body.supplierName,
+        date:          purchaseDate,
+        description:   `Purchase: ${number}`,
+        documentRef:   number,
+        documentType:  'purchase',
+        debit:         0,
+        credit:        totalAmount,
+      })
+    }
+
+    res.json(fmt(purchase))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/purchases/:id', async (req, res) => {
+  try {
+    const doc = await Purchase.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean()
+    if (!doc) return res.status(404).json({ error: 'Not found' })
+    res.json(fmtLean(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/purchases/:id', async (req, res) => {
+  try { await Purchase.findOneAndDelete({ id: req.params.id }); res.json({ ok: true }) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SALES  (Outward stock + Customer AR ledger + Profit tracking)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/sales', async (req, res) => {
+  try {
+    const docs = await Sale.find().sort({ createdAt: -1 }).lean()
+    res.json(docs.map(fmtLean))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/sales', async (req, res) => {
+  try {
+    const count  = await Sale.countDocuments()
+    const number = `SAL-${String(count + 1).padStart(4, '0')}`
+    const saleDate = req.body.date || new Date().toISOString().slice(0, 10)
+
+    let subtotal  = 0
+    let totalCost = 0
+    const saleItems  = []
+    const stockErrs  = []
+
+    for (const item of (req.body.items || [])) {
+      const qty       = parseInt(item.qty) || 0
+      const costPrice = parseFloat(item.costPrice) || 0
+      const salePrice = parseFloat(item.salePrice) || 0
+      const amount    = qty * salePrice
+      const cost      = qty * costPrice
+      const profit    = amount - cost
+      const marginPct = amount > 0 ? +((profit / amount) * 100).toFixed(1) : 0
+
+      subtotal  += amount
+      totalCost += cost
+
+      // Deduct from inventory
+      if (item.inventoryId) {
+        const inv = await models.inventory.findOne({ id: item.inventoryId }).lean()
+        if (inv) {
+          if ((inv.qty || 0) < qty) {
+            stockErrs.push(`"${inv.name}": only ${inv.qty || 0} in stock, need ${qty}`)
+          } else {
+            await models.inventory.findOneAndUpdate({ id: item.inventoryId }, { $inc: { qty: -qty } })
+          }
+        }
+        await StockMovement.create({
+          id: Date.now().toString() + Math.floor(Math.random() * 999),
+          inventoryId:  item.inventoryId,
+          itemName:     item.description,
+          date:         saleDate,
+          type:         'OUT',
+          qty,
+          unit:         item.unit || 'pcs',
+          color:        item.color || '',
+          costPrice,
+          salePrice,
+          documentRef:  number,
+          documentType: 'sale',
         })
       }
+
+      saleItems.push({ ...item, qty, costPrice, salePrice, amount, profit, marginPct })
     }
-    res.json(fmt(doc))
+
+    if (stockErrs.length > 0) {
+      return res.status(400).json({ error: `Insufficient stock:\n${stockErrs.join('\n')}` })
+    }
+
+    const taxRate   = parseFloat(req.body.taxRate) || 0
+    const taxAmount = +(subtotal * taxRate / 100).toFixed(2)
+    const total     = subtotal + taxAmount
+    const totalProfit = subtotal - totalCost  // profit before tax
+
+    const sale = await Sale.create({
+      ...req.body,
+      id: Date.now().toString(),
+      number,
+      items:       saleItems,
+      subtotal,
+      totalCost,
+      totalProfit,
+      taxAmount,
+      total,
+      status: 'confirmed',
+    })
+
+    // ── CUSTOMER LEDGER: Debit = AR (customer owes us) ────────────────────────
+    if (req.body.accountHeadID && total > 0) {
+      await postLedgerEntry({
+        accountHeadID: req.body.accountHeadID,
+        contactName:   req.body.clientName,
+        date:          saleDate,
+        description:   `Sale: ${number}`,
+        documentRef:   number,
+        documentType:  'sale',
+        debit:         total,
+        credit:        0,
+      })
+    }
+
+    res.json(fmt(sale))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/sales/:id', async (req, res) => {
+  try {
+    const doc = await Sale.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean()
+    if (!doc) return res.status(404).json({ error: 'Not found' })
+    res.json(fmtLean(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/sales/:id', async (req, res) => {
+  try { await Sale.findOneAndDelete({ id: req.params.id }); res.json({ ok: true }) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  INVENTORY SEARCH  (for Sales product picker)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/inventory/search', async (req, res) => {
+  try {
+    const { q } = req.query
+    const filter = q
+      ? { $or: [{ name: { $regex: q, $options: 'i' } }, { sku: { $regex: q, $options: 'i' } }, { category: { $regex: q, $options: 'i' } }] }
+      : {}
+    // Show all items (including 0 stock) so user can see what exists
+    const items = await models.inventory.find(filter).sort({ name: 1 }).limit(40).lean()
+    res.json({ items: items.map(fmtLean) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Stock Movements (audit trail per item) ───────────────────────────────────
+app.get('/api/stock-movements', async (req, res) => {
+  try {
+    const filter = {}
+    if (req.query.inventoryId) filter.inventoryId = req.query.inventoryId
+    if (req.query.type) filter.type = req.query.type
+    const docs = await StockMovement.find(filter).sort({ createdAt: -1 }).limit(200).lean()
+    res.json(docs.map(fmtLean))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Account Heads / Balance Sheet summary ────────────────────────────────────
+app.get('/api/account-heads', async (req, res) => {
+  try {
+    const [invItems, suppliers, clients, allSales, allPurchases] = await Promise.all([
+      models.inventory.find().lean(),
+      Contact.find({ type: 'supplier' }).lean(),
+      Contact.find({ type: 'client' }).lean(),
+      Sale.find({ status: 'confirmed' }).lean(),
+      Purchase.find().lean(),
+    ])
+
+    const inventoryValue   = invItems.reduce((s, i) => s + (i.qty || 0) * (i.costPrice || 0), 0)
+    // AP: supplier balance where credit > debit (we owe them = negative balance)
+    const accountsPayable  = suppliers.reduce((s, c) => {
+      const bal = c.currentBalance || 0
+      return s + (bal < 0 ? Math.abs(bal) : 0)
+    }, 0)
+    // AR: client balance where debit > credit (they owe us = positive balance)
+    const accountsReceivable = clients.reduce((s, c) => {
+      const bal = c.currentBalance || 0
+      return s + (bal > 0 ? bal : 0)
+    }, 0)
+
+    const salesRevenue  = allSales.reduce((s, sale) => s + (sale.total || 0), 0)
+    const cogs          = allSales.reduce((s, sale) => s + (sale.totalCost || 0), 0)
+    const grossProfit   = salesRevenue - cogs
+    const totalPurchases = allPurchases.reduce((s, p) => s + (p.totalAmount || 0), 0)
+    const totalPurchasesPaid = allPurchases.reduce((s, p) => s + (p.paidAmount || 0), 0)
+
+    res.json({
+      inventoryValue,
+      accountsPayable,
+      accountsReceivable,
+      salesRevenue,
+      cogs,
+      grossProfit,
+      totalPurchases,
+      totalPurchasesPaid,
+      outstandingPayable: totalPurchases - totalPurchasesPaid,
+    })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

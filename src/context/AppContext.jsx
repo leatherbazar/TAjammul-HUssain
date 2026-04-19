@@ -12,6 +12,8 @@ const INITIAL_DATA = {
   quotations: [],
   supplyOrders: [],
   invoices: [],
+  purchases: [],
+  sales: [],
   deliveryNotes: [],
   inventory: [],
   transactions: [],
@@ -139,6 +141,17 @@ export function AppProvider({ children }) {
     api('DELETE', `/api/${collection}/${id}`)
   }
 
+  // Refresh all data from server (called after operations that bypass AppContext)
+  const refreshData = async () => {
+    try {
+      const res = await fetch('/api/data')
+      const serverData = await res.json()
+      setData(prev => ({ ...prev, ...serverData }))
+    } catch (err) {
+      console.error('Failed to refresh data:', err)
+    }
+  }
+
   const verifyMasterCode = (code) => code === data.masterCode
 
   const nextInvoiceNumber = () => {
@@ -173,7 +186,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       data, update, updateNested, addRecord, updateRecord, deleteRecord,
-      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber
+      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber, refreshData
     }}>
       {children}
     </AppContext.Provider>

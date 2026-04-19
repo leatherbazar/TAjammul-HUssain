@@ -193,11 +193,62 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
 
 const PRIORITY_COLORS = { low: 'var(--text-muted)', normal: 'var(--blue)', high: 'var(--amber)', urgent: 'var(--red)' }
 
+// Inline receive-stock modal (used directly in SupplyOrders list)
+function ReceiveStockModal({ order, onConfirm, onCancel }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [date, setDate]   = useState(today)
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+  const totalAmount = (order.items || []).reduce((s, i) =>
+    s + (parseInt(i.qty) || 0) * (parseFloat(i.marketPrice) || 0), 0)
+
+  const go = async () => {
+    setLoading(true)
+    try { await onConfirm({ date, notes }) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: 28, maxWidth: 500, width: '100%', border: '1px solid var(--glass-border)' }}>
+        <h3 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 800 }}>🏭 Confirm & Receive Stock</h3>
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 14, fontSize: 13 }}>
+          <div style={{ fontWeight: 700 }}>{order.title} — {order.number}</div>
+          <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+            Supplier: <strong style={{ color: 'var(--text)' }}>{order.supplierName || '—'}</strong> &nbsp;|&nbsp;
+            Total: <strong style={{ color: 'var(--green)' }}>PKR {totalAmount.toLocaleString()}</strong>
+          </div>
+        </div>
+        <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
+          <div className="input-group">
+            <label className="input-label">Receive Date</label>
+            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Notes</label>
+            <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any remarks…" />
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--amber)', padding: '8px 12px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', marginBottom: 14 }}>
+          ⚠️ This will: add items to <strong>Inventory</strong> · create a <strong>Purchase #{order.number?.replace('SO-', 'PUR-')}</strong> · post <strong>PKR {totalAmount.toLocaleString()} to Supplier Ledger (AP)</strong>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-primary" onClick={go} disabled={loading}>
+            {loading ? '⏳ Processing…' : '✅ Confirm & Receive'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SupplyOrders({ isEmployee = false }) {
-  const { data, addRecord, updateRecord, deleteRecord, currentUser } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentUser, refreshData } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
+  const [receiveModal, setReceiveModal] = useState(null)
   const [search, setSearch] = useState('')
 
   const orders = useMemo(() => {
@@ -215,6 +266,23 @@ export default function SupplyOrders({ isEmployee = false }) {
       toast.success('Supply order created!')
     }
     setView('list'); setSelected(null)
+  }
+
+  const handleReceive = async (order, { date, notes }) => {
+    try {
+      const res = await fetch(`/api/purchases/from-supply-order/${order.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, notes }),
+      })
+      const result = await res.json()
+      if (!res.ok) { toast.error(result.error || 'Conversion failed'); return }
+      toast.success(`Stock received! ${result.purchase?.number} created. Inventory & Supplier Ledger updated.`)
+      setReceiveModal(null)
+      await refreshData()
+    } catch (err) {
+      toast.error('Network error — is the server running?')
+    }
   }
 
   if (view !== 'list') {
@@ -257,10 +325,25 @@ export default function SupplyOrders({ isEmployee = false }) {
                 <td><span style={{ color: PRIORITY_COLORS[o.priority], fontWeight: 700, fontSize: 12, textTransform: 'capitalize' }}>{o.priority}</span></td>
                 <td><span className={`badge badge-${o.status === 'in-progress' ? 'pending' : o.status}`}>{o.status}</span></td>
                 <td>
-                  <div style={{ display: 'flex', gap: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => { if (isEmployee) { setSelected(o); setView('edit') } else { setMasterAction({ type: 'edit', item: o }) } }}>✏️</button>
                     {!isEmployee && <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: o.id })}>🗑️</button>}
                     <button className="btn btn-secondary btn-xs" onClick={() => exportSupplyOrderPDF(o)} title="Export PDF">📄</button>
+                    {!isEmployee && !o.purchaseRef && o.status !== 'cancelled' && (
+                      <button
+                        className="btn btn-xs"
+                        style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)', color: 'var(--green)', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        onClick={() => setReceiveModal(o)}
+                        title="Confirm goods received — creates Purchase, updates Inventory"
+                      >
+                        🏭 Receive
+                      </button>
+                    )}
+                    {o.purchaseRef && (
+                      <span style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'monospace', padding: '2px 6px', background: 'rgba(34,197,94,0.1)', borderRadius: 4 }}>
+                        ✓ {o.purchaseRef}
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -278,6 +361,14 @@ export default function SupplyOrders({ isEmployee = false }) {
             setMasterAction(null)
           }}
           onCancel={() => setMasterAction(null)}
+        />
+      )}
+
+      {receiveModal && (
+        <ReceiveStockModal
+          order={receiveModal}
+          onConfirm={(opts) => handleReceive(receiveModal, opts)}
+          onCancel={() => setReceiveModal(null)}
         />
       )}
     </div>
