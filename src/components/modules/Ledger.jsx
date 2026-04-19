@@ -81,6 +81,101 @@ function RecordPaymentModal({ invoice, contact, onClose, onSuccess }) {
   )
 }
 
+// ─── Pay Supplier Modal ───────────────────────────────────────────────────────
+function PaySupplierModal({ contact, onClose, onSuccess }) {
+  const [amount, setAmount] = useState('')
+  const [wallet, setWallet] = useState('Cash')
+  const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10))
+  const [notes,  setNotes]  = useState('')
+  const [ref,    setRef]    = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    const amt = parseFloat(amount)
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return }
+    setSaving(true)
+    try {
+      const docRef = ref || `PAY-${Date.now().toString().slice(-6)}`
+      // Ledger debit entry (we paid the supplier → reduces what we owe)
+      await fetch('/api/ledger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountHeadID: contact.accountHeadID,
+          contactName:   contact.name,
+          date,
+          description:   `Payment to ${contact.name}${notes ? ': ' + notes : ''}`,
+          documentRef:   docRef,
+          documentType:  'payment',
+          debit: amt, credit: 0,
+        }),
+      })
+      // DayBook expense entry (cash/bank going out)
+      await fetch('/api/dayBook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Date.now().toString(), date, type: 'expense',
+          category:    'Supplier Payment',
+          description: `Payment to ${contact.name}${notes ? ' — ' + notes : ''}`,
+          partyName:   contact.name,
+          accountHeadID: contact.accountHeadID,
+          reference:   docRef,
+          wallet,
+          debit: amt, credit: 0,
+        }),
+      })
+      toast.success(`PKR ${amt.toLocaleString()} paid to ${contact.name}!`)
+      onSuccess()
+    } catch { toast.error('Connection error.'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">💸 Pay Supplier — {contact.name}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+          Account: <span style={{ fontFamily: 'monospace', color: 'var(--amber)', fontWeight: 700 }}>{contact.accountHeadID}</span>
+          &nbsp;·&nbsp; This will post a <strong>Debit</strong> entry (reducing what you owe) and log an expense in Day Book.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div className="input-group">
+            <label className="input-label">Amount Paid (PKR) *</label>
+            <input type="number" className="input" value={amount}
+              onChange={e => setAmount(e.target.value)} placeholder="0.00" autoFocus
+              style={{ borderColor: amount ? 'var(--amber)' : undefined, fontSize: 18, fontWeight: 700 }} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Paid Via</label>
+            <select className="input" value={wallet} onChange={e => setWallet(e.target.value)}>
+              {['Cash','Bank','JazzCash','EasyPaisa','Cheque'].map(w => <option key={w}>{w}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label className="input-label">Date</label>
+            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Reference (optional)</label>
+            <input className="input" value={ref} onChange={e => setRef(e.target.value)} placeholder="Cheque#, PO#..." />
+          </div>
+          <div className="input-group col-span-2">
+            <label className="input-label">Notes</label>
+            <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="What is this payment for?" />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
+          <button className="btn btn-warning w-full" onClick={handleSave} disabled={saving}
+            style={{ background: 'rgba(245,158,11,0.2)', border: '1px solid var(--amber)', color: 'var(--amber)', fontWeight: 700 }}>
+            {saving ? 'Saving...' : '💸 Record Payment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Edit Account ID Modal ────────────────────────────────────────────────────
 function EditAccountIDModal({ contact, onClose, onSuccess }) {
   const [newID, setNewID] = useState(contact.accountHeadID || '')
@@ -225,6 +320,7 @@ export default function Ledger() {
   const [editIDFor, setEditIDFor]       = useState(null)
   const [advanceFor, setAdvanceFor]     = useState(null)
   const [payInvoice, setPayInvoice]     = useState(null)
+  const [paySupplier, setPaySupplier]   = useState(null)
 
   const loadContacts = async () => {
     setLoading(true)
@@ -323,6 +419,13 @@ export default function Ledger() {
                 onClick={() => setAdvanceFor(contact)}
                 style={{ borderColor: 'var(--green)', color: 'var(--green)' }}>
                 💵 Receive Advance
+              </button>
+            )}
+            {contact.type === 'supplier' && (
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => setPaySupplier(contact)}
+                style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
+                💸 Pay Supplier
               </button>
             )}
             <button className="btn btn-secondary btn-sm"
@@ -559,27 +662,48 @@ export default function Ledger() {
             onSuccess={async () => { setPayInvoice(null); await reloadLedger() }}
           />
         )}
+        {paySupplier && (
+          <PaySupplierModal
+            contact={paySupplier}
+            onClose={() => setPaySupplier(null)}
+            onSuccess={async () => { setPaySupplier(null); await reloadLedger() }}
+          />
+        )}
       </div>
     )
   }
 
   // ── Contacts List ─────────────────────────────────────────────────────────────
-  const totalAR    = contacts.filter(c => c.type === 'client'  ).reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const totalAP    = contacts.filter(c => c.type === 'supplier').reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const staffCount = contacts.filter(c => c.type === 'staff').length
+  const clientContacts   = contacts.filter(c => c.type === 'client')
+  const supplierContacts = contacts.filter(c => c.type === 'supplier')
+  const staffContacts    = contacts.filter(c => c.type === 'staff')
 
-  // Client-wise pending bill totals (using invoices from AppContext)
+  // Totals from invoice data (most accurate for AR)
   const allInvoices = data.invoices || []
-  const clientMeta = contacts.filter(c => c.type === 'client').reduce((acc, c) => {
+  const totalAR = allInvoices
+    .filter(i => i.status !== 'paid' && i.status !== 'cancelled')
+    .reduce((s, i) => s + Math.max((i.total || 0) - (i.advancePaid || 0), 0), 0)
+  const totalAP = supplierContacts.reduce((s, c) => s + Math.abs(c.currentBalance || 0), 0)
+
+  // Client-wise pending bill totals
+  const clientMeta = clientContacts.reduce((acc, c) => {
     const invs    = allInvoices.filter(i =>
       i.accountHeadID
         ? i.accountHeadID === c.accountHeadID
         : i.clientName?.toLowerCase() === c.name?.toLowerCase()
     )
-    const pending = invs.filter(i => i.status !== 'paid').reduce((s, i) => s + ((i.total || 0) - (i.advancePaid || 0)), 0)
+    const pending = invs.filter(i => i.status !== 'paid').reduce((s, i) => s + Math.max((i.total || 0) - (i.advancePaid || 0), 0), 0)
     acc[c.id] = pending
     return acc
   }, {})
+
+  // Filter button config
+  const FILTER_TABS = [
+    { key: 'all',      label: 'All',       icon: '📗', color: 'var(--text)',   count: contacts.length },
+    { key: 'client',   label: 'Clients',   icon: '🤝', color: 'var(--green)',  count: clientContacts.length,   value: `PKR ${totalAR.toLocaleString()}`,        sub: 'receivable' },
+    { key: 'supplier', label: 'Suppliers', icon: '🏭', color: 'var(--amber)',  count: supplierContacts.length, value: `PKR ${totalAP.toLocaleString()}`,        sub: 'payable' },
+    { key: 'staff',    label: 'Staff',     icon: '👷', color: 'var(--blue)',   count: staffContacts.length,    value: `${staffContacts.length} members`,        sub: 'employees' },
+  ]
 
   return (
     <div className="fade-in">
@@ -587,35 +711,45 @@ export default function Ledger() {
         <h2>📗 <span>Ledger</span></h2>
       </div>
 
-      {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18 }}>
-        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)' }}>
-          <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>📥 TOTAL RECEIVABLE</div>
-          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Orbitron, monospace', color: 'var(--green)', margin: '4px 0' }}>PKR {totalAR.toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{contacts.filter(c => c.type === 'client').length} clients</div>
-        </div>
-        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
-          <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 700 }}>📤 TOTAL PAYABLE</div>
-          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Orbitron, monospace', color: 'var(--amber)', margin: '4px 0' }}>PKR {Math.abs(totalAP).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{contacts.filter(c => c.type === 'supplier').length} suppliers</div>
-        </div>
-        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)' }}>
-          <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700 }}>👷 STAFF ACCOUNTS</div>
-          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Orbitron, monospace', color: 'var(--blue)', margin: '4px 0' }}>{staffCount}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>staff members</div>
-        </div>
+      {/* ── Filter Tab Cards (clickable) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 18 }}>
+        {FILTER_TABS.map(tab => {
+          const active = typeFilter === tab.key
+          return (
+            <div
+              key={tab.key}
+              onClick={() => setTypeFilter(tab.key)}
+              style={{
+                padding: '14px 18px', borderRadius: 12, cursor: 'pointer',
+                background: active ? `${tab.color}22` : 'var(--glass)',
+                border: `2px solid ${active ? tab.color : 'var(--glass-border)'}`,
+                transition: 'all 0.18s',
+                boxShadow: active ? `0 0 12px ${tab.color}33` : 'none',
+              }}
+            >
+              <div style={{ fontSize: 11, color: tab.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                {tab.icon} {tab.label}
+              </div>
+              {tab.value && (
+                <div style={{ fontSize: 17, fontWeight: 900, fontFamily: 'Orbitron, monospace', color: tab.color, margin: '2px 0' }}>
+                  {tab.value}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {tab.count} {tab.sub || 'total'}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Filters */}
+      {/* Search bar */}
       <div className="search-bar" style={{ marginBottom: 14 }}>
-        <input className="input" style={{ maxWidth: 280 }} placeholder="🔍 Search by name or account ID..."
+        <input className="input" style={{ maxWidth: 320 }} placeholder="🔍 Search by name or account ID..."
           value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input" style={{ maxWidth: 160 }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          <option value="all">All Types</option>
-          <option value="client">Clients</option>
-          <option value="supplier">Suppliers</option>
-          <option value="staff">Staff</option>
-        </select>
+        {search && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setSearch('')}>✕ Clear</button>
+        )}
       </div>
 
       {loading ? (

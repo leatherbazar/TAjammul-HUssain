@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import { exportQuotationPDF } from '../../utils/pdfExport'
@@ -7,10 +7,12 @@ import toast from 'react-hot-toast'
 
 // Translate internal status → client-facing label + style
 function clientStatusBadge(status) {
-  if (status === 'approved')
+  if (status === 'approved' || status === 'invoiced')
     return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)', color: 'var(--green)', whiteSpace: 'nowrap' }}>✅ Approved</span>
   if (status === 'cancelled')
     return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.4)', color: 'var(--red)', whiteSpace: 'nowrap' }}>❌ Rejected</span>
+  if (status === 'sent')
+    return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)', color: 'var(--blue)', whiteSpace: 'nowrap' }}>👀 Under Review</span>
   return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: 'var(--amber)', whiteSpace: 'nowrap' }}>⏳ Pending Review</span>
 }
 
@@ -175,8 +177,21 @@ function NewRequestForm({ user, onSave, onCancel }) {
 }
 
 export default function ClientPortal() {
-  const { currentUser, addRecord, data } = useApp()
+  const { currentUser, addRecord, data, refreshData } = useApp()
   const [tab, setTab] = useState('dashboard')
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Refresh data from server on mount and whenever tab changes (so status is always latest)
+  useEffect(() => {
+    refreshData()
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await refreshData()
+    setRefreshing(false)
+    toast.success('Updated!')
+  }, [refreshData])
 
   const myQuotations = useMemo(() =>
     (data.quotations || []).filter(q => q.clientId === currentUser?.id || q.clientName === currentUser?.name),
@@ -196,10 +211,17 @@ export default function ClientPortal() {
 
   return (
     <div className="fade-in">
-      <div className="tabs">
+      <div className="tabs" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {[['dashboard', '📊 Overview'], ['new-request', '➕ New Request'], ['my-requests', '📋 My Requests'], ['my-invoices', '🧾 My Invoices']].map(([k, l]) => (
           <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh status from server"
+          style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--green)', whiteSpace: 'nowrap' }}>
+          {refreshing ? '⏳' : '🔄'} Refresh
+        </button>
       </div>
 
       {tab === 'dashboard' && <ClientDashboard user={currentUser} />}
