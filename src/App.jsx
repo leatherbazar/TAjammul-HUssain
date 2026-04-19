@@ -148,14 +148,28 @@ function SendQuoteModal({ clients, onClose, onSend }) {
   const total = form.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0)
 
   const handleSend = () => {
-    if (!form.clientName) return
-    if (!form.items.some(i => i.description)) return
+    if (!form.clientName) { alert('Please select a client.'); return }
+    if (!form.items.some(i => i.description)) { alert('Add at least one item description.'); return }
     const client = clients.find(c => c.name === form.clientName)
     onSend({ ...form, total, clientId: client?.id, source: 'admin', status: 'sent' })
   }
 
   const overlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
   const boxStyle = { background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }
+
+  // Guard: no clients registered yet
+  if (clients.length === 0) {
+    return (
+      <div style={overlayStyle} onClick={onClose}>
+        <div style={{ ...boxStyle, textAlign: 'center', padding: 40 }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>👤</div>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>No clients registered</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 20 }}>Add client accounts in User Management first before sending a quote.</div>
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={overlayStyle} onClick={onClose}>

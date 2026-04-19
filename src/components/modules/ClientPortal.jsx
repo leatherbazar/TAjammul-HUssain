@@ -181,14 +181,18 @@ export default function ClientPortal() {
   const [tab, setTab] = useState('dashboard')
   const [refreshing, setRefreshing] = useState(false)
 
-  // Refresh data on tab change + auto-poll every 15s when viewing requests
+  // Keep a ref so the interval always calls the latest refreshData, never a stale closure
+  const refreshRef = React.useRef(refreshData)
+  useEffect(() => { refreshRef.current = refreshData }, [refreshData])
+
+  // Refresh on tab change + auto-poll every 15s on My Requests tab
   useEffect(() => {
-    refreshData()
+    refreshRef.current()
     if (tab === 'my-requests') {
-      const timer = setInterval(() => refreshData(), 15000)
+      const timer = setInterval(() => refreshRef.current(), 15000)
       return () => clearInterval(timer)
     }
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)

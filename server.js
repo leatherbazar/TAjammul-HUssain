@@ -624,7 +624,7 @@ app.delete('/api/dayBook/:id', async (req, res) => {
         // Post a reversing entry (swap debit ↔ credit to undo the effect)
         await postLedgerEntry({
           accountHeadID: entry.accountHeadID,
-          contactName:   entry.partyName || entry.contactName,
+          contactName:   entry.contactName || entry.partyName,
           date:          new Date().toISOString().slice(0, 10),
           description:   `[Reversed] ${entry.description}`,
           documentRef:   `REV-${entry.id}`,

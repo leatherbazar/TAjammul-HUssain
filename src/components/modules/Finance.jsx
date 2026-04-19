@@ -178,6 +178,8 @@ function DayBook() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [softDeleted, setSoftDeleted] = useState(new Set())
+  // Ref map of id → undone flag — avoids stale closure issues with rapid deletes
+  const undoneMap = React.useRef({})
 
   const entries = useMemo(() => {
     let list = [...(data.dayBook || [])].sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -213,19 +215,16 @@ function DayBook() {
 
   const handleDelete = (id) => {
     setMasterAction(null)
-    // Soft-delete: hide immediately in UI
     setSoftDeleted(prev => new Set([...prev, id]))
+    undoneMap.current[id] = false
 
-    let undone = false
-
-    // Show undo toast for 5 seconds
     toast(
       (t) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 13 }}>Entry removed</span>
           <button
             onClick={() => {
-              undone = true
+              undoneMap.current[id] = true
               setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
               toast.dismiss(t.id)
               toast.success('Deletion undone!')
@@ -237,15 +236,14 @@ function DayBook() {
       { duration: 5000, id: `del-${id}` }
     )
 
-    // After 5s, if not undone — permanently delete + reverse ledger on server
     setTimeout(async () => {
-      if (undone) return
+      if (undoneMap.current[id]) { delete undoneMap.current[id]; return }
+      delete undoneMap.current[id]
       try {
         await fetch(`/api/dayBook/${id}`, { method: 'DELETE' })
         setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
-        await refreshData()  // ledger auto-updated by server
+        await refreshData()
       } catch {
-        // Restore on failure
         setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
         toast.error('Delete failed — entry restored.')
       }
