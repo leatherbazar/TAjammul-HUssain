@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import ContactSelect from '../common/ContactSelect'
 import MasterCodeModal from '../common/MasterCodeModal'
@@ -364,7 +364,7 @@ export default function Sales() {
   const [accountHeads, setAccountHeads] = useState(null)
 
   // Load account heads on mount
-  useState(() => {
+  useEffect(() => {
     fetch('/api/account-heads')
       .then(r => r.json())
       .then(setAccountHeads)
