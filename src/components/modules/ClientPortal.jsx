@@ -181,9 +181,13 @@ export default function ClientPortal() {
   const [tab, setTab] = useState('dashboard')
   const [refreshing, setRefreshing] = useState(false)
 
-  // Refresh data from server on mount and whenever tab changes (so status is always latest)
+  // Refresh data on tab change + auto-poll every 15s when viewing requests
   useEffect(() => {
     refreshData()
+    if (tab === 'my-requests') {
+      const timer = setInterval(() => refreshData(), 15000)
+      return () => clearInterval(timer)
+    }
   }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = useCallback(async () => {
@@ -232,15 +236,23 @@ export default function ClientPortal() {
 
       {tab === 'my-requests' && (
         <div>
-          <div className="page-header"><h2>📋 <span>My Requests</span></h2></div>
+          <div className="page-header">
+            <h2>📋 <span>My Requests</span></h2>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-refreshes every 15s</span>
+          </div>
           <div className="table-wrapper">
             <table>
-              <thead><tr><th>#</th><th>Date</th><th>Items</th><th>Target Value</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>#</th><th>Type</th><th>Date</th><th>Items</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
-                {myQuotations.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No requests submitted yet.</td></tr>}
+                {myQuotations.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No requests submitted yet.</td></tr>}
                 {[...myQuotations].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(q => (
                   <tr key={q.id}>
                     <td className="font-mono" style={{ fontSize: 12 }}>{q.number}</td>
+                    <td>
+                      {q.source === 'admin'
+                        ? <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: 'var(--blue)', fontWeight: 700 }}>📩 Admin Quote</span>
+                        : <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}>📋 My Request</span>}
+                    </td>
                     <td style={{ fontSize: 12 }}>{q.date}</td>
                     <td>{(q.items || []).length} item(s)</td>
                     <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
@@ -249,6 +261,9 @@ export default function ClientPortal() {
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊 Excel</button>
+                        {q.status === 'cancelled' && (
+                          <button className="btn btn-warning btn-xs" onClick={() => setTab('new-request')} title="Request was rejected — send a new one">🔁 New</button>
+                        )}
                       </div>
                     </td>
                   </tr>

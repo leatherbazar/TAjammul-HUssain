@@ -1,11 +1,19 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
+
 import MasterCodeModal from '../common/MasterCodeModal'
 import toast from 'react-hot-toast'
 
 export default function UserManagement() {
-  const { data, updateNested, update } = useApp()
+  const { data, updateNested, update, refreshData } = useApp()
   const [tab, setTab] = useState('employees')
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await refreshData()
+    setRefreshing(false)
+  }
   const [masterAction, setMasterAction] = useState(null)
   const [empForm, setEmpForm] = useState({ name: '', username: '', password: '', phone: '', role: 'field', active: true })
   const [showEmpForm, setShowEmpForm] = useState(false)
@@ -64,6 +72,11 @@ export default function UserManagement() {
     <div className="fade-in">
       <div className="page-header">
         <h2>👥 <span>User Management</span></h2>
+        <button className="btn btn-secondary btn-sm" onClick={handleRefresh} disabled={refreshing}
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ display: 'inline-block', animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>🔄</span>
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       <div className="tabs">
