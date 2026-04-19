@@ -166,7 +166,7 @@ function EditEntryModal({ entry, onClose, onSave }) {
 }
 
 function DayBook() {
-  const { data, addRecord, deleteRecord, refreshData } = useApp()
+  const { data, refreshData } = useApp()
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     type: 'income', description: '', debit: '', credit: '',
@@ -177,13 +177,15 @@ function DayBook() {
   const [editEntry, setEditEntry] = useState(null)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [softDeleted, setSoftDeleted] = useState(new Set())
 
   const entries = useMemo(() => {
     let list = [...(data.dayBook || [])].sort((a, b) => new Date(b.date) - new Date(a.date))
     if (search) list = list.filter(e => e.description?.toLowerCase().includes(search.toLowerCase()) || e.reference?.includes(search))
     if (typeFilter !== 'all') list = list.filter(e => e.type === typeFilter)
+    list = list.filter(e => !softDeleted.has(e.id))
     return list
-  }, [data.dayBook, search, typeFilter])
+  }, [data.dayBook, search, typeFilter, softDeleted])
 
   const totals = useMemo(() => entries.reduce((acc, e) => ({ debit: acc.debit + (parseFloat(e.debit) || 0), credit: acc.credit + (parseFloat(e.credit) || 0) }), { debit: 0, credit: 0 }), [entries])
 
@@ -201,7 +203,6 @@ function DayBook() {
       })
       const saved = await res.json()
       if (!res.ok) { toast.error(saved.error || 'Failed to save entry'); return }
-      // Refresh all data so ledger balances + dayBook list stay in sync
       await refreshData()
       setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '', category: '', partyName: '', accountHeadID: '' }))
       toast.success('Entry added & ledger updated!')
@@ -210,12 +211,45 @@ function DayBook() {
     }
   }
 
-  const handleDelete = async (id) => {
-    deleteRecord('dayBook', id)
+  const handleDelete = (id) => {
     setMasterAction(null)
-    toast.success('Entry deleted.')
-    // Refresh so ledger & contact balances stay in sync
-    setTimeout(() => refreshData(), 400)
+    // Soft-delete: hide immediately in UI
+    setSoftDeleted(prev => new Set([...prev, id]))
+
+    let undone = false
+
+    // Show undo toast for 5 seconds
+    toast(
+      (t) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13 }}>Entry removed</span>
+          <button
+            onClick={() => {
+              undone = true
+              setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
+              toast.dismiss(t.id)
+              toast.success('Deletion undone!')
+            }}
+            style={{ padding: '4px 12px', borderRadius: 6, background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', color: '#4ade80', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+          >↩ Undo</button>
+        </div>
+      ),
+      { duration: 5000, id: `del-${id}` }
+    )
+
+    // After 5s, if not undone — permanently delete + reverse ledger on server
+    setTimeout(async () => {
+      if (undone) return
+      try {
+        await fetch(`/api/dayBook/${id}`, { method: 'DELETE' })
+        setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
+        await refreshData()  // ledger auto-updated by server
+      } catch {
+        // Restore on failure
+        setSoftDeleted(prev => { const n = new Set(prev); n.delete(id); return n })
+        toast.error('Delete failed — entry restored.')
+      }
+    }, 5000)
   }
 
   return (

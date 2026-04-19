@@ -613,6 +613,28 @@ app.put('/api/dayBook/:id', async (req, res) => {
 
 app.delete('/api/dayBook/:id', async (req, res) => {
   try {
+    const entry = await models.dayBook.findOne({ id: req.params.id }).lean()
+    if (!entry) return res.status(404).json({ error: 'Not found' })
+
+    // ── Auto-reverse ledger if this entry had an accountHeadID ─────────────────
+    if (entry.accountHeadID) {
+      const debit  = parseFloat(entry.debit)  || 0
+      const credit = parseFloat(entry.credit) || 0
+      if (debit > 0 || credit > 0) {
+        // Post a reversing entry (swap debit ↔ credit to undo the effect)
+        await postLedgerEntry({
+          accountHeadID: entry.accountHeadID,
+          contactName:   entry.partyName || entry.contactName,
+          date:          new Date().toISOString().slice(0, 10),
+          description:   `[Reversed] ${entry.description}`,
+          documentRef:   `REV-${entry.id}`,
+          documentType:  'reversal',
+          debit:  credit,  // swap: what was credited is now debited back
+          credit: debit,   // swap: what was debited is now credited back
+        })
+      }
+    }
+
     await models.dayBook.findOneAndDelete({ id: req.params.id })
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
