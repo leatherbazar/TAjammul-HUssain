@@ -166,11 +166,12 @@ function ConvertSOModal({ order, onConfirm, onCancel }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      backdropFilter: 'blur(4px)',
     }}>
-      <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: 28, maxWidth: 520, width: '100%', border: '1px solid var(--glass-border)' }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800 }}>🏭 Confirm & Receive Stock</h3>
+      <div style={{ background: 'linear-gradient(145deg,#1e1e32 0%,#16162a 100%)', borderRadius: 16, padding: 28, maxWidth: 520, width: '100%', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 32px 64px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.05)' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800, color: '#fff' }}>🏭 Confirm & Receive Stock</h3>
 
         <div style={{ padding: '12px 16px', borderRadius: 10, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 18, fontSize: 13 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>{order.title} ({order.number})</div>

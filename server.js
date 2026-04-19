@@ -579,7 +579,11 @@ async function upsertInventoryItem({ description, color, qty, unit, costPrice, s
 // Convert Supply Order → Purchase (main "Confirm & Receive" action)
 app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
   try {
-    const order = await models.supplyOrders.findOne({ id: req.params.soId }).lean()
+    // Try custom id field first, then MongoDB _id (handles older records)
+    let order = await models.supplyOrders.findOne({ id: req.params.soId }).lean()
+    if (!order) {
+      try { order = await models.supplyOrders.findById(req.params.soId).lean() } catch (_) {}
+    }
     if (!order) return res.status(404).json({ error: 'Supply order not found' })
     if (order.purchaseRef) return res.status(400).json({ error: 'Already converted to purchase' })
 
@@ -653,10 +657,13 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
       status:            'received',
     })
 
-    // Mark supply order as delivered
-    await models.supplyOrders.findOneAndUpdate({ id: req.params.soId }, {
-      $set: { status: 'delivered', purchaseRef: number }
-    })
+    // Mark supply order as delivered (try custom id, fall back to _id)
+    let soUpdated = await models.supplyOrders.findOneAndUpdate(
+      { id: req.params.soId }, { $set: { status: 'delivered', purchaseRef: number } }, { new: true }
+    )
+    if (!soUpdated) {
+      try { await models.supplyOrders.findByIdAndUpdate(req.params.soId, { $set: { status: 'delivered', purchaseRef: number } }) } catch (_) {}
+    }
 
     // ── SUPPLIER LEDGER: Credit = goods received (AP — we owe supplier) ────────
     if (order.accountHeadID && totalAmount > 0) {
