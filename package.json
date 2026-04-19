@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server.js",
+    "dev:full": "concurrently --names \"API,UI\" --prefix-colors \"yellow,cyan\" \"node server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js"
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^9.2.1",
     "vite": "^5.1.4"
   }
 }
