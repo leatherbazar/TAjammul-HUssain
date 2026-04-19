@@ -34,7 +34,11 @@
       "Bash(awk '{print $5}')",
       "Bash(xargs -I{} taskkill //PID {} //F)",
       "Bash(curl -s http://localhost:5000/api/health)",
-      "Bash(curl -s http://localhost:5000/api/data)"
+      "Bash(curl -s http://localhost:5000/api/data)",
+      "Bash(gh pr:*)",
+      "Bash(where gh:*)",
+      "Bash(winget list:*)",
+      "Read(//c/Program Files/**)"
     ]
   }
 }

@@ -137,30 +137,42 @@ function ItemRow({ item, index, onChange, onDelete }) {
 function ItemCard({ item, index, onChange, onDelete }) {
   const amount = (parseInt(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)
   return (
-    <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>Item {index + 1}</span>
-        <button className="btn btn-danger btn-xs" onClick={onDelete} style={{ padding: '4px 10px' }}>✕ Remove</button>
+    <div style={{ padding: '16px', borderRadius: 12, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.04)', marginBottom: 12 }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 700 }}>Item {index + 1}</span>
+        <button className="btn btn-danger btn-xs" onClick={onDelete} style={{ padding: '6px 14px', fontSize: 13 }}>✕ Remove</button>
       </div>
-      <div className="input-group" style={{ marginBottom: 10 }}>
-        <label className="input-label">Description</label>
+
+      {/* Description */}
+      <div className="input-group" style={{ marginBottom: 14 }}>
+        <label className="input-label" style={{ fontSize: 13, marginBottom: 6 }}>Description</label>
         <input className="input" value={item.description} onChange={e => onChange('description', e.target.value)}
-          placeholder="Item description" spellCheck style={{ fontSize: 16 }} />
+          placeholder="Item description" spellCheck
+          style={{ fontSize: 17, padding: '12px 14px', minHeight: 50 }} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+
+      {/* QTY + PRICE big fields */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         <div className="input-group">
-          <label className="input-label" style={{ color: 'var(--blue)', fontWeight: 700 }}>QTY ✏️</label>
+          <label className="input-label" style={{ color: 'var(--blue)', fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
+            QTY ✏️
+          </label>
           <QtyInput value={item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)}
-            style={{ padding: '12px 10px', fontSize: 20, width: '100%' }} />
+            style={{ padding: '16px 10px', fontSize: 26, width: '100%', minHeight: 62, letterSpacing: 1 }} />
         </div>
         <div className="input-group">
-          <label className="input-label" style={{ color: 'var(--amber)', fontWeight: 700 }}>UNIT PRICE ✏️</label>
+          <label className="input-label" style={{ color: 'var(--amber)', fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
+            UNIT PRICE ✏️
+          </label>
           <PriceInput value={item.unitPrice} onChange={v => onChange('unitPrice', v)} onBlur={v => onChange('unitPrice', v)}
-            style={{ padding: '12px 10px 12px 34px', fontSize: 20 }} />
+            style={{ padding: '16px 10px 16px 38px', fontSize: 22, minHeight: 62 }} />
         </div>
       </div>
-      <div style={{ textAlign: 'right', fontWeight: 900, color: 'var(--green)', fontSize: 16 }}>
-        Amount: PKR {amount.toLocaleString()}
+
+      {/* Amount */}
+      <div style={{ textAlign: 'right', fontWeight: 900, color: 'var(--green)', fontSize: 18, padding: '8px 0', borderTop: '1px solid var(--glass-border)' }}>
+        Total: PKR {amount.toLocaleString()}
       </div>
     </div>
   )

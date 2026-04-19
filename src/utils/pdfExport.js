@@ -24,51 +24,49 @@ function loadImg(src) {
 }
 
 async function addHeader(doc, title, docNumber, date, stealth = false) {
-  const pageW = doc.internal.pageSize.getWidth()
+  const pageW = doc.internal.pageSize.getWidth() // 210mm for A4
 
-  // White/light header background
+  // White header background
   doc.setFillColor(248, 248, 248)
-  doc.rect(0, 0, pageW, 42, 'F')
+  doc.rect(0, 0, pageW, 44, 'F')
 
-  // Logo image (left side)
+  // Logo — 20mm tall, proportional width (~77mm)
   try {
     const img = await loadImg('/tataheer-logo.png')
     if (img) {
-      // Wide logo: TAT icon + TATAHEER TRADERS text
-      doc.addImage(img, 'PNG', 8, 4, 85, 22)
+      doc.addImage(img, 'PNG', 8, 3, 77, 20)
     }
   } catch (e) {
-    // Fallback text
     doc.setFontSize(16)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 30, 30)
     doc.text('TATAHEER TRADERS', 14, 16)
   }
 
-  // Company address (below logo area, left)
+  // Company address below logo
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
-  doc.text(COMPANY.address, 8, 30)
-  doc.text(`Tel: ${COMPANY.phone}   Email: ${COMPANY.email}`, 8, 36)
+  doc.text(COMPANY.address, 8, 28)
+  doc.text(`Tel: ${COMPANY.phone}   Email: ${COMPANY.email}`, 8, 34)
 
   // Document title (right side, dark red)
-  doc.setFontSize(13)
+  doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(120, 0, 0)
   doc.text(title, pageW - 12, 12, { align: 'right' })
 
   // Doc number & date
-  doc.setFontSize(8.5)
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(60, 60, 60)
-  doc.text(`No: ${docNumber}`, pageW - 12, 20, { align: 'right' })
-  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 27, { align: 'right' })
+  doc.text(`No: ${docNumber}`, pageW - 12, 22, { align: 'right' })
+  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 30, { align: 'right' })
 
   // Divider line
   doc.setDrawColor(180, 180, 180)
   doc.setLineWidth(0.4)
-  doc.line(0, 43, pageW, 43)
+  doc.line(0, 44, pageW, 44)
 
   doc.setTextColor(0, 0, 0)
 }
@@ -111,30 +109,43 @@ export async function exportQuotationPDF(quotation, stealth = false) {
   doc.text(quotation.clientContact || '', 16, y + 17)
   y += 26
 
+  // Detect if any item has color or size matrix data
+  const items = quotation.items || []
+  const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)
+  const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
+
   const bodyRows = []
-  ;(quotation.items || []).forEach(item => {
+  items.forEach(item => {
     if (item.useMatrix && item.matrixRows?.length) {
       item.matrixRows.forEach(row => {
         const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
         const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
-        bodyRows.push([
-          item.description, row.color, sizeStr, total,
-          stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
-          stealth ? '' : `PKR ${(total * parseFloat(item.unitPrice || 0)).toLocaleString()}`
-        ])
+        const row_ = [item.description]
+        if (hasColor)  row_.push(row.color || '—')
+        if (hasMatrix) row_.push(sizeStr || '—')
+        row_.push(total)
+        if (!stealth) { row_.push(`PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`); row_.push(`PKR ${(total * parseFloat(item.unitPrice || 0)).toLocaleString()}`) }
+        bodyRows.push(row_)
       })
     } else {
-      bodyRows.push([
-        item.description, item.color || '—', 'One Size', item.qty || 0,
-        stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
-        stealth ? '' : `PKR ${((item.qty || 0) * parseFloat(item.unitPrice || 0)).toLocaleString()}`
-      ])
+      const row_ = [item.description]
+      if (hasColor)  row_.push(item.color || '')
+      if (hasMatrix) row_.push('—')
+      row_.push(item.qty || 0)
+      if (!stealth) { row_.push(`PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`); row_.push(`PKR ${((item.qty || 0) * parseFloat(item.unitPrice || 0)).toLocaleString()}`) }
+      bodyRows.push(row_)
     }
   })
 
+  const head = ['Description']
+  if (hasColor)  head.push('Color')
+  if (hasMatrix) head.push('Sizes')
+  head.push('Qty')
+  if (!stealth) { head.push('Unit Price'); head.push('Amount') }
+
   autoTable(doc, {
     startY: y,
-    head: [['Description', 'Color', 'Sizes', 'Qty', ...(stealth ? [] : ['Unit Price', 'Amount'])]],
+    head: [head],
     body: bodyRows,
     theme: 'striped',
     headStyles,
@@ -193,15 +204,42 @@ export async function exportInvoicePDF(invoice, stealth = false) {
   doc.text(invoice.clientName || '—', 16, y + 12)
   y += 22
 
-  const bodyRows = (invoice.items || []).map(item => [
-    item.description, item.qty,
-    stealth ? '' : `PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`,
-    stealth ? '' : `PKR ${(item.qty * parseFloat(item.unitPrice || 0)).toLocaleString()}`
-  ])
+  const items = invoice.items || []
+  const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)
+  const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
+
+  const bodyRows = []
+  items.forEach(item => {
+    if (item.useMatrix && item.matrixRows?.length) {
+      item.matrixRows.forEach(row => {
+        const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
+        const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
+        const row_ = [item.description]
+        if (hasColor)  row_.push(row.color || '—')
+        if (hasMatrix) row_.push(sizeStr || '—')
+        row_.push(total)
+        if (!stealth) { row_.push(`PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`); row_.push(`PKR ${(total * parseFloat(item.unitPrice || 0)).toLocaleString()}`) }
+        bodyRows.push(row_)
+      })
+    } else {
+      const row_ = [item.description]
+      if (hasColor)  row_.push(item.color || '')
+      if (hasMatrix) row_.push('—')
+      row_.push(item.qty || 0)
+      if (!stealth) { row_.push(`PKR ${parseFloat(item.unitPrice || 0).toLocaleString()}`); row_.push(`PKR ${((item.qty || 0) * parseFloat(item.unitPrice || 0)).toLocaleString()}`) }
+      bodyRows.push(row_)
+    }
+  })
+
+  const head = ['Description']
+  if (hasColor)  head.push('Color')
+  if (hasMatrix) head.push('Sizes')
+  head.push('Qty')
+  if (!stealth) { head.push('Unit Price'); head.push('Amount') }
 
   autoTable(doc, {
     startY: y,
-    head: [['Description', 'Qty', ...(stealth ? [] : ['Unit Price', 'Amount'])]],
+    head: [head],
     body: bodyRows,
     theme: 'striped',
     headStyles,
@@ -404,17 +442,76 @@ export async function exportDeliveryNotePDF(note) {
   const doc = new jsPDF()
   await addHeader(doc, 'DELIVERY NOTE', note.number, note.date)
 
+  let y = 50
+  // Delivery info row
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(40, 40, 40)
+  doc.text('To:', 14, y)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`${note.clientName || '—'}   ${note.clientContact || ''}`, 24, y)
+  if (note.deliveryAddress) {
+    y += 6
+    doc.text(`Address: ${note.deliveryAddress}`, 14, y)
+  }
+  if (note.driverName || note.vehicleNo) {
+    y += 6
+    doc.text(`Driver: ${note.driverName || '—'}   Vehicle: ${note.vehicleNo || '—'}`, 14, y)
+  }
+  y += 12
+
+  const items = note.items || []
+  const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)
+  const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
+
+  const bodyRows = []
+  items.forEach(item => {
+    if (item.useMatrix && item.matrixRows?.length) {
+      item.matrixRows.forEach(row => {
+        const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
+        const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
+        const row_ = [item.description]
+        if (hasColor)  row_.push(row.color || '—')
+        if (hasMatrix) row_.push(sizeStr || '—')
+        row_.push(total)
+        row_.push(item.note || '')
+        bodyRows.push(row_)
+      })
+    } else {
+      const row_ = [item.description]
+      if (hasColor)  row_.push(item.color || '')
+      if (hasMatrix) row_.push('—')
+      row_.push(item.qty || 0)
+      row_.push(item.note || '')
+      bodyRows.push(row_)
+    }
+  })
+
+  const head = ['Description']
+  if (hasColor)  head.push('Color')
+  if (hasMatrix) head.push('Sizes')
+  head.push('Qty')
+  head.push('Note')
+
   autoTable(doc, {
-    startY: 50,
-    head: [['Item', 'Color', 'Size Breakdown', 'Total Qty']],
-    body: (note.items || []).map(item => [
-      item.description, item.color || '—', item.sizeBreakdown || '—', item.qty
-    ]),
+    startY: y,
+    head: [head],
+    body: bodyRows,
     theme: 'striped',
     headStyles,
     bodyStyles,
     alternateRowStyles: altStyles,
   })
+
+  if (note.notes) {
+    const finalY = doc.lastAutoTable.finalY + 8
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(40, 40, 40)
+    doc.text('Notes:', 14, finalY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(note.notes, 30, finalY)
+  }
 
   addFooter(doc)
   doc.save(`DeliveryNote-${note.number}.pdf`)
