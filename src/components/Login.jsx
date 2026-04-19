@@ -34,7 +34,8 @@ export default function Login() {
         return
       }
       if (user.role !== portal) {
-        toast.error(`This account is not an ${portal}. Please select the correct portal.`)
+        const roleLabel = user.role === 'admin' ? 'Admin' : user.role === 'employee' ? 'Employee' : 'Client'
+        toast.error(`Wrong portal! This is a ${roleLabel} account. Please select the "${roleLabel}" tab above.`)
         return
       }
       setCurrentUser(user)

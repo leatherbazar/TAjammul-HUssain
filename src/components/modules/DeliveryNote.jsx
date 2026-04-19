@@ -215,8 +215,23 @@ export default function DeliveryNotes() {
   }, [data.deliveryNotes, search])
 
   const handleSave = (f) => {
-    if (selected) { updateRecord('deliveryNotes', selected.id, f); toast.success('Updated!') }
-    else { const num = `DN-${Date.now().toString().slice(-5)}`; addRecord('deliveryNotes', { ...f, number: num }); toast.success('Delivery note created!') }
+    if (selected) {
+      updateRecord('deliveryNotes', selected.id, f)
+      toast.success('Updated!')
+    } else {
+      let num
+      if (f.invoiceRef) {
+        // Smart numbering: DN-201/1, DN-201/2 ... per invoice
+        const existing = (data.deliveryNotes || []).filter(n => n.invoiceRef === f.invoiceRef)
+        const part = existing.length + 1
+        const invSuffix = f.invoiceRef.replace(/^[A-Za-z]+-/, '') // "INV-201" → "201"
+        num = `DN-${invSuffix}/${part}`
+      } else {
+        num = `DN-${Date.now().toString().slice(-5)}`
+      }
+      addRecord('deliveryNotes', { ...f, number: num })
+      toast.success(`Delivery Note ${num} created!`)
+    }
     setView('list'); setSelected(null)
   }
 

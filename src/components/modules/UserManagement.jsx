@@ -16,14 +16,24 @@ export default function UserManagement() {
   const employees = data.users?.employees || []
   const clients = data.users?.clients || []
 
-  const addEmployee = () => {
+  const addEmployee = async () => {
     if (!empForm.name || !empForm.username || !empForm.password) { toast.error('Fill all required fields.'); return }
     if (employees.find(e => e.username === empForm.username)) { toast.error('Username taken.'); return }
-    const newEmp = { ...empForm, id: Date.now().toString(), createdAt: new Date().toISOString() }
-    updateNested('users', 'employees', [...employees, newEmp])
-    setEmpForm({ name: '', username: '', password: '', phone: '', role: 'field', active: true })
-    setShowEmpForm(false)
-    toast.success(`Employee ${newEmp.name} created!`)
+    try {
+      const res = await fetch('/api/users/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...empForm, id: Date.now().toString(), createdAt: new Date().toISOString() })
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || 'Failed to create employee.'); return }
+      updateNested('users', 'employees', [...employees, data])
+      setEmpForm({ name: '', username: '', password: '', phone: '', role: 'field', active: true })
+      setShowEmpForm(false)
+      toast.success(`Employee ${data.name} created!`)
+    } catch {
+      toast.error('Connection error. Is the server running?')
+    }
   }
 
   const toggleEmpStatus = (id) => {

@@ -95,7 +95,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
       <div className="section-box">
         <div className="section-title" style={{ justifyContent: 'space-between' }}>
           <span>📦 Items to Source</span>
-          {!isEmployee && <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add Item</button>}
+          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add Item</button>
         </div>
 
         {form.items.map((item, idx) => {
@@ -109,7 +109,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                 <div className="input-group" style={{ gridColumn: 'span 2' }}>
                   <label className="input-label">Item #{idx + 1}</label>
                   <input className="input" value={item.description} onChange={e => updateItem(item.id, 'description', e.target.value)}
-                    placeholder="Item description" spellCheck disabled={isEmployee} />
+                    placeholder="Item description" spellCheck />
                 </div>
                 <div className="input-group">
                   <label className="input-label">
@@ -121,7 +121,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                     min="0"
                     value={item.useMatrix && qty > 0 ? qty : item.qty}
                     onChange={e => updateItem(item.id, 'qty', e.target.value)}
-                    disabled={isEmployee || (item.useMatrix && qty > 0)}
+                    disabled={item.useMatrix && qty > 0}
                     style={{ borderColor: item.useMatrix && qty > 0 ? 'var(--amber)' : undefined }}
                     placeholder="Enter qty"
                   />
@@ -144,17 +144,15 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                     PKR {amount.toLocaleString()}
                   </div>
                 </div>
-                {!isEmployee && (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    <button
-                      className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
-                      onClick={() => updateItem(item.id, 'useMatrix', !item.useMatrix)}
-                    >🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}</button>
-                    {form.items.length > 1 && (
-                      <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
-                    )}
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <button
+                    className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
+                    onClick={() => updateItem(item.id, 'useMatrix', !item.useMatrix)}
+                  >🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}</button>
+                  {form.items.length > 1 && (
+                    <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
+                  )}
+                </div>
                 <div className="input-group" style={{ gridColumn: isEmployee ? 'span 2' : 'span 1' }}>
                   <label className="input-label">Field Note</label>
                   <input className="input" value={item.note} onChange={e => updateItem(item.id, 'note', e.target.value)}
@@ -162,15 +160,10 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                 </div>
               </div>
 
-              {item.useMatrix && !isEmployee && (
+              {item.useMatrix && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--glass-border)' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', marginBottom: 8 }}>🎨 Size & Color Breakdown</div>
                   <AttributeMatrix rows={item.matrixRows} onChange={rows => updateMatrix(item.id, rows)} />
-                </div>
-              )}
-              {item.useMatrix && isEmployee && item.matrixRows?.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <AttributeMatrix rows={item.matrixRows} onChange={() => {}} readOnly />
                 </div>
               )}
             </div>
@@ -181,6 +174,25 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           <label className="input-label">General Notes</label>
           <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />
         </div>
+
+        {/* Order Total */}
+        {(() => {
+          const grandTotal = form.items.reduce((sum, item) => {
+            const matrixQty = calcMatrixTotal(item.matrixRows)
+            const qty = item.useMatrix && matrixQty > 0 ? matrixQty : (parseInt(item.qty) || 0)
+            return sum + qty * (parseFloat(item.marketPrice) || 0)
+          }, 0)
+          return (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+              <div style={{ padding: '12px 24px', borderRadius: 10, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', textAlign: 'right' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>ORDER TOTAL</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--green)', fontFamily: 'monospace' }}>
+                  PKR {grandTotal.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -301,7 +313,7 @@ export default function SupplyOrders({ isEmployee = false }) {
     <div className="fade-in">
       <div className="page-header">
         <h2>🛒 <span>Supply Orders</span></h2>
-        {!isEmployee && <button className="btn btn-primary" onClick={() => { setSelected(null); setView('new') }}>+ New Order</button>}
+        <button className="btn btn-primary" onClick={() => { setSelected(null); setView('new') }}>+ New Order</button>
       </div>
 
       <div className="search-bar">

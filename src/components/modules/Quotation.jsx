@@ -201,13 +201,21 @@ export default function Quotations() {
   const [masterAction, setMasterAction] = useState(null) // {type, id}
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [clientFilter, setClientFilter] = useState('all')
+
+  // Unique client list from quotations for the dropdown
+  const clientList = useMemo(() => {
+    const names = [...new Set((data.quotations || []).map(q => q.clientName).filter(Boolean))].sort()
+    return names
+  }, [data.quotations])
 
   const quotations = useMemo(() => {
     let list = data.quotations || []
     if (search) list = list.filter(q => q.clientName?.toLowerCase().includes(search.toLowerCase()) || q.number?.includes(search))
     if (statusFilter !== 'all') list = list.filter(q => q.status === statusFilter)
+    if (clientFilter !== 'all') list = list.filter(q => q.clientName === clientFilter)
     return list
-  }, [data.quotations, search, statusFilter])
+  }, [data.quotations, search, statusFilter, clientFilter])
 
   const handleSave = (formData, goToInvoice = false) => {
     let savedRecord
@@ -276,11 +284,20 @@ export default function Quotations() {
       </div>
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search by client or number..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input" style={{ maxWidth: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <input className="input" style={{ maxWidth: 260 }} placeholder="🔍 Search by client or number..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 200 }} value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
+          <option value="all">👤 All Clients</option>
+          {clientList.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
+        <select className="input" style={{ maxWidth: 150 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="all">All Status</option>
           {['draft', 'sent', 'approved', 'invoiced', 'cancelled'].map(s => <option key={s}>{s}</option>)}
         </select>
+        {(clientFilter !== 'all' || statusFilter !== 'all') && (
+          <button className="btn btn-secondary btn-sm" onClick={() => { setClientFilter('all'); setStatusFilter('all'); setSearch('') }}>
+            ✕ Clear
+          </button>
+        )}
       </div>
 
       <div className="table-wrapper">
@@ -294,7 +311,12 @@ export default function Quotations() {
             {quotations.length === 0 && (
               <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No quotations found. Create your first one.</td></tr>
             )}
-            {quotations.map(q => (
+            {quotations.map(q => {
+              // Find existing invoice for this quotation (by quotationId or quotationRef)
+              const existingInv = (data.invoices || []).find(
+                i => i.quotationId === q.id || i.quotationRef === q.number
+              )
+              return (
               <tr key={q.id}>
                 <td className="font-mono" style={{ fontSize: 12 }}>{q.number}</td>
                 <td><div style={{ fontWeight: 600 }}>{q.clientName}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{q.clientContact}</div></td>
@@ -309,13 +331,23 @@ export default function Quotations() {
                     <button className="btn btn-danger btn-xs" onClick={() => requestDelete(q.id)}>🗑️</button>
                     <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, q.stealthPrint)}>📄</button>
                     <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊</button>
-                    {q.status === 'approved' && (
+                    {existingInv ? (
+                      // Invoice already exists — show the linked invoice number, no duplicate allowed
+                      <span style={{
+                        fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 700,
+                        background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)',
+                        color: 'var(--green)', whiteSpace: 'nowrap',
+                      }}>
+                        ✓ {existingInv.number}
+                      </span>
+                    ) : q.status === 'approved' ? (
                       <button className="btn btn-success btn-xs" onClick={() => convertToInvoice(q)}>→ Invoice</button>
-                    )}
+                    ) : null}
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

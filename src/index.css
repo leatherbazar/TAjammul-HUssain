@@ -738,8 +738,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
   /* Navbar */
   .navbar { padding: 8px 10px; gap: 8px; }
-  .navbar-brand-text { display: none; }
-  .logo-img { height: 36px !important; }
+  .navbar-brand-text { height: 22px !important; }
+  .logo-img { height: 32px !important; }
   .navbar-user .role-badge { display: none; }
 
   /* Tables — horizontal scroll */

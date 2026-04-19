@@ -395,6 +395,72 @@ app.post('/api/ledger', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Reassign accountHeadID (migrates ledger, invoices, purchases, sales) ──────
+app.put('/api/contacts/:id/reassign-id', async (req, res) => {
+  try {
+    const { newAccountHeadID } = req.body
+    if (!newAccountHeadID) return res.status(400).json({ error: 'newAccountHeadID required' })
+
+    const contact = await Contact.findOne({ id: req.params.id }).lean()
+    if (!contact) return res.status(404).json({ error: 'Contact not found' })
+
+    // Check if target ID is already taken by another contact
+    const clash = await Contact.findOne({ accountHeadID: newAccountHeadID }).lean()
+    if (clash && clash.id !== req.params.id) {
+      return res.status(400).json({ error: `${newAccountHeadID} is already assigned to "${clash.name}"` })
+    }
+
+    const oldID = contact.accountHeadID
+
+    // Swap if the target ID belongs to another contact (exchange IDs)
+    if (clash && clash.id !== req.params.id) {
+      await Contact.findOneAndUpdate({ id: clash.id }, { $set: { accountHeadID: oldID } })
+      await Ledger.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: '__tmp__' } })
+      await Ledger.updateMany({ accountHeadID: newAccountHeadID }, { $set: { accountHeadID: oldID } })
+      await Ledger.updateMany({ accountHeadID: '__tmp__' }, { $set: { accountHeadID: newAccountHeadID } })
+      await Invoice.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: '__tmp__' } })
+      await Invoice.updateMany({ accountHeadID: newAccountHeadID }, { $set: { accountHeadID: oldID } })
+      await Invoice.updateMany({ accountHeadID: '__tmp__' }, { $set: { accountHeadID: newAccountHeadID } })
+    } else {
+      // Simple rename — migrate by accountHeadID
+      await Ledger.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: newAccountHeadID } })
+      await Invoice.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: newAccountHeadID } })
+      await Purchase.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: newAccountHeadID } })
+      await Sale.updateMany({ accountHeadID: oldID }, { $set: { accountHeadID: newAccountHeadID } })
+
+      // Also backfill legacy records that have no accountHeadID but match by contactName
+      if (contact.name) {
+        const nameRx = new RegExp(`^${contact.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+        const noID   = { $in: [null, '', undefined] }
+        await Invoice.updateMany(
+          { clientName: nameRx, accountHeadID: noID },
+          { $set: { accountHeadID: newAccountHeadID } }
+        )
+        await Ledger.updateMany(
+          { contactName: nameRx, accountHeadID: noID },
+          { $set: { accountHeadID: newAccountHeadID } }
+        )
+        await Sale.updateMany(
+          { contactName: nameRx, accountHeadID: noID },
+          { $set: { accountHeadID: newAccountHeadID } }
+        )
+        await Purchase.updateMany(
+          { supplierName: nameRx, accountHeadID: noID },
+          { $set: { accountHeadID: newAccountHeadID } }
+        )
+      }
+    }
+
+    const updated = await Contact.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { accountHeadID: newAccountHeadID } },
+      { new: true }
+    ).lean()
+
+    res.json({ ok: true, contact: fmtLean(updated), oldID, newID: newAccountHeadID })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  INVOICES  (with auto ledger trigger)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -447,6 +513,62 @@ app.delete('/api/invoices/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Record payment against an invoice (marks paid/partial + ledger + dayBook) ─
+app.post('/api/invoices/:id/payment', async (req, res) => {
+  try {
+    const { amount, wallet, date, notes } = req.body
+    const paid = parseFloat(amount) || 0
+    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+
+    const invoice = await Invoice.findOne({ id: req.params.id }).lean()
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' })
+
+    const prevPaid    = parseFloat(invoice.advancePaid) || 0
+    const total       = parseFloat(invoice.total) || 0
+    const newPaid     = prevPaid + paid
+    const newBalance  = total - newPaid
+    const newStatus   = newBalance <= 0 ? 'paid' : 'partial'
+
+    const updated = await Invoice.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { advancePaid: newPaid, balance: Math.max(newBalance, 0), status: newStatus } },
+      { new: true }
+    ).lean()
+
+    // ── Ledger credit entry (client paid us) ──────────────────────────────────
+    if (invoice.accountHeadID) {
+      await postLedgerEntry({
+        accountHeadID: invoice.accountHeadID,
+        contactName:   invoice.clientName,
+        date:          date || new Date().toISOString().slice(0, 10),
+        description:   `Payment received for ${invoice.number}`,
+        documentRef:   invoice.number,
+        documentType:  'payment',
+        debit:         0,
+        credit:        paid,
+      })
+    }
+
+    // ── DayBook entry (income received) ───────────────────────────────────────
+    await models.dayBook.create({
+      id:          Date.now().toString(),
+      date:        date || new Date().toISOString().slice(0, 10),
+      type:        'income',
+      category:    'Client Payment',
+      description: `Payment received: ${invoice.number} from ${invoice.clientName || 'Client'}`,
+      partyName:   invoice.clientName || '',
+      accountHeadID: invoice.accountHeadID || '',
+      reference:   invoice.number,
+      debit:       paid,
+      credit:      0,
+      wallet:      wallet || 'Cash',
+      notes:       notes || '',
+    })
+
+    res.json({ ok: true, invoice: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DAYBOOK  (with auto ledger trigger for payments)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -474,6 +596,25 @@ app.post('/api/dayBook', async (req, res) => {
     }
 
     res.json(fmt(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/dayBook/:id', async (req, res) => {
+  try {
+    const doc = await models.dayBook.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: req.body },
+      { new: true }
+    ).lean()
+    if (!doc) return res.status(404).json({ error: 'Not found' })
+    res.json(fmtLean(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/dayBook/:id', async (req, res) => {
+  try {
+    await models.dayBook.findOneAndDelete({ id: req.params.id })
+    res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -679,6 +820,20 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
       })
     }
 
+    // ── DAY BOOK: Auto-entry (direct create, no ledger re-trigger) ────────────
+    await models.dayBook.create({
+      id:          Date.now().toString(),
+      date:        purchaseDate,
+      type:        'expense',
+      category:    'Purchase',
+      description: `Stock Received: ${number} from ${order.supplierName} (SO: ${order.number})`,
+      partyName:   order.supplierName,
+      reference:   number,
+      credit:      totalAmount,   // AP — we owe supplier
+      debit:       0,
+      wallet:      'Accounts Payable',
+    })
+
     res.json({ ok: true, purchase: fmt(purchase) })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -754,6 +909,20 @@ app.post('/api/purchases', async (req, res) => {
         credit:        totalAmount,
       })
     }
+
+    // ── DAY BOOK: Auto-entry ──────────────────────────────────────────────────
+    await models.dayBook.create({
+      id:          Date.now().toString(),
+      date:        purchaseDate,
+      type:        'expense',
+      category:    'Purchase',
+      description: `Direct Purchase: ${number} from ${req.body.supplierName || 'Supplier'}`,
+      partyName:   req.body.supplierName || '',
+      reference:   number,
+      credit:      totalAmount,
+      debit:       0,
+      wallet:      'Accounts Payable',
+    })
 
     res.json(fmt(purchase))
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -870,6 +1039,20 @@ app.post('/api/sales', async (req, res) => {
         credit:        0,
       })
     }
+
+    // ── DAY BOOK: Auto-entry ──────────────────────────────────────────────────
+    await models.dayBook.create({
+      id:          Date.now().toString(),
+      date:        saleDate,
+      type:        'income',
+      category:    'Sale',
+      description: `Sale: ${number} to ${req.body.clientName || 'Customer'} | Profit: PKR ${totalProfit.toLocaleString()}`,
+      partyName:   req.body.clientName || '',
+      reference:   number,
+      debit:       total,     // AR — customer owes us
+      credit:      0,
+      wallet:      'Accounts Receivable',
+    })
 
     res.json(fmt(sale))
   } catch (err) { res.status(500).json({ error: err.message }) }

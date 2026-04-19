@@ -30,6 +30,7 @@ const EMPLOYEE_NAV = [
   { section: 'My Work' },
   { path: '/employee', label: 'Dashboard', icon: '📊' },
   { path: '/employee/supply-orders', label: 'Supply Orders', icon: '🛒' },
+  { path: '/employee/quotations', label: 'Quotations', icon: '📋' },
   { path: '/employee/inventory', label: 'Inventory Update', icon: '📦' },
 ]
 

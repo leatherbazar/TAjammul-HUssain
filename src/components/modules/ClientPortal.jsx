@@ -5,6 +5,15 @@ import { exportQuotationPDF } from '../../utils/pdfExport'
 import { exportQuotationExcel } from '../../utils/excelExport'
 import toast from 'react-hot-toast'
 
+// Translate internal status → client-facing label + style
+function clientStatusBadge(status) {
+  if (status === 'approved')
+    return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)', color: 'var(--green)', whiteSpace: 'nowrap' }}>✅ Approved</span>
+  if (status === 'cancelled')
+    return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.4)', color: 'var(--red)', whiteSpace: 'nowrap' }}>❌ Rejected</span>
+  return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: 'var(--amber)', whiteSpace: 'nowrap' }}>⏳ Pending Review</span>
+}
+
 function ClientDashboard({ user }) {
   const { data } = useApp()
   const myQuotations = (data.quotations || []).filter(q => q.clientId === user.id || q.clientName === user.name)
@@ -42,7 +51,7 @@ function ClientDashboard({ user }) {
                     <td style={{ fontSize: 12 }}>{q.date}</td>
                     <td>{(q.items || []).length} item(s)</td>
                     <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
-                    <td><span className={`badge badge-${q.status}`}>{q.status}</span></td>
+                    <td>{clientStatusBadge(q.status)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>
@@ -213,7 +222,7 @@ export default function ClientPortal() {
                     <td style={{ fontSize: 12 }}>{q.date}</td>
                     <td>{(q.items || []).length} item(s)</td>
                     <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
-                    <td><span className={`badge badge-${q.status}`}>{q.status}</span></td>
+                    <td>{clientStatusBadge(q.status)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>

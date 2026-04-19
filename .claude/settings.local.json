@@ -38,7 +38,22 @@
       "Bash(gh pr:*)",
       "Bash(where gh:*)",
       "Bash(winget list:*)",
-      "Read(//c/Program Files/**)"
+      "Read(//c/Program Files/**)",
+      "Bash(npx vite:*)",
+      "Bash(cat vite.config.js)",
+      "Bash(cat vite.config.ts)",
+      "Bash(node --input-type=module --eval ':*)",
+      "Bash(node --check server.js)",
+      "Bash(timeout 15 node server.js)",
+      "Bash(node server.js)",
+      "Bash(curl -s -X POST http://localhost:5000/api/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(kill %1)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); try { const j=JSON.parse\\(d\\); console.log\\('OK - keys:', Object.keys\\(j\\).join\\(', '\\)\\); } catch\\(e\\) { console.log\\('ERROR:', d.slice\\(0,300\\)\\); }\" kill %1)",
+      "Bash(node -e ':*)",
+      "Bash(npm list:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(node -e \" const c=[]; process.stdin.on\\('data',d=>c.push\\(d\\)\\); process.stdin.on\\('end',\\(\\)=>{ const d = JSON.parse\\(Buffer.concat\\(c\\).toString\\(\\)\\); console.log\\('DayBook entries:', d.dayBook.length\\); console.log\\('Ledger entries total:', 'check via ledger endpoint'\\); console.log\\('Contacts with currentBalance:'\\); \\(d.contacts||[]\\).forEach\\(c => console.log\\(' ', c.accountHeadID, c.name, '→ balance:', c.currentBalance\\)\\); console.log\\('Purchases:', d.purchases.length\\); console.log\\('Sales:', d.sales.length\\); }\\);\" kill %1)"
     ]
   }
 }

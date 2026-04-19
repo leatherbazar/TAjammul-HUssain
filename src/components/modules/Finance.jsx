@@ -74,8 +74,99 @@ function WalletManager() {
   )
 }
 
+const CATEGORIES = {
+  income:            ['Client Payment', 'Sales Recovery', 'Advance Received', 'Refund', 'Other Income'],
+  expense:           ['Salary', 'Rent', 'Utilities', 'Transport', 'Stock Purchase', 'Repair', 'Miscellaneous'],
+  'advance-given':   ['To Supplier', 'To Employee', 'To Other'],
+  'advance-received':['From Client', 'From Other'],
+  transfer:          ['Cash to Bank', 'Bank to Cash', 'Internal Transfer'],
+}
+
+function EditEntryModal({ entry, onClose, onSave }) {
+  const [form, setForm] = useState({ ...entry })
+  const [saving, setSaving] = useState(false)
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = async () => {
+    if (!form.description) { toast.error('Description required.'); return }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/dayBook/${entry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 }),
+      })
+      const saved = await res.json()
+      if (!res.ok) { toast.error(saved.error || 'Failed'); setSaving(false); return }
+      toast.success('Entry updated!')
+      onSave()
+    } catch { toast.error('Connection error.'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">✏️ Edit Day Book Entry</div>
+        <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
+          <div className="input-group">
+            <label className="input-label">Date</label>
+            <input type="date" className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Type</label>
+            <select className="input" value={form.type} onChange={e => { setField('type', e.target.value); setField('category', '') }}>
+              {['income', 'expense', 'advance-given', 'advance-received', 'transfer'].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label className="input-label">Category</label>
+            <select className="input" value={form.category || ''} onChange={e => setField('category', e.target.value)}>
+              <option value="">— Select —</option>
+              {(CATEGORIES[form.type] || []).map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label className="input-label">Wallet</label>
+            <select className="input" value={form.wallet} onChange={e => setField('wallet', e.target.value)}>
+              {WALLETS.map(w => <option key={w}>{w}</option>)}
+            </select>
+          </div>
+          <div className="input-group col-span-2">
+            <label className="input-label">Description *</label>
+            <input className="input" value={form.description} onChange={e => setField('description', e.target.value)} spellCheck />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Party</label>
+            <input className="input" value={form.partyName || ''} onChange={e => setField('partyName', e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Reference</label>
+            <input className="input" value={form.reference || ''} onChange={e => setField('reference', e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Debit (Dr)</label>
+            <input type="number" className="input" min="0" value={form.debit || ''} onChange={e => setField('debit', e.target.value)}
+              style={{ borderColor: form.debit ? 'var(--red)' : undefined }} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Credit (Cr)</label>
+            <input type="number" className="input" min="0" value={form.credit || ''} onChange={e => setField('credit', e.target.value)}
+              style={{ borderColor: form.credit ? 'var(--green)' : undefined }} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary w-full" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : '💾 Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DayBook() {
-  const { data, addRecord, deleteRecord } = useApp()
+  const { data, addRecord, deleteRecord, refreshData } = useApp()
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     type: 'income', description: '', debit: '', credit: '',
@@ -83,6 +174,7 @@ function DayBook() {
     partyName: '', accountHeadID: '',
   })
   const [masterAction, setMasterAction] = useState(null)
+  const [editEntry, setEditEntry] = useState(null)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
 
@@ -97,12 +189,33 @@ function DayBook() {
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.description) { toast.error('Description required.'); return }
     if (!form.debit && !form.credit) { toast.error('Enter debit or credit amount.'); return }
-    addRecord('dayBook', { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 })
-    setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '', partyName: '', accountHeadID: '' }))
-    toast.success('Entry added!')
+    const entry = { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 }
+    try {
+      const res = await fetch('/api/dayBook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...entry, id: Date.now().toString(), createdAt: new Date().toISOString() }),
+      })
+      const saved = await res.json()
+      if (!res.ok) { toast.error(saved.error || 'Failed to save entry'); return }
+      // Refresh all data so ledger balances + dayBook list stay in sync
+      await refreshData()
+      setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '', category: '', partyName: '', accountHeadID: '' }))
+      toast.success('Entry added & ledger updated!')
+    } catch {
+      toast.error('Connection error.')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    deleteRecord('dayBook', id)
+    setMasterAction(null)
+    toast.success('Entry deleted.')
+    // Refresh so ledger & contact balances stay in sync
+    setTimeout(() => refreshData(), 400)
   }
 
   return (
@@ -124,8 +237,15 @@ function DayBook() {
           </div>
           <div className="input-group">
             <label className="input-label">Type</label>
-            <select className="input" value={form.type} onChange={e => setField('type', e.target.value)}>
+            <select className="input" value={form.type} onChange={e => { setField('type', e.target.value); setField('category', '') }}>
               {['income', 'expense', 'advance-given', 'advance-received', 'transfer'].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label className="input-label">Category</label>
+            <select className="input" value={form.category} onChange={e => setField('category', e.target.value)}>
+              <option value="">— Select —</option>
+              {(CATEGORIES[form.type] || []).map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div className="input-group">
@@ -200,20 +320,27 @@ function DayBook() {
       <div className="table-wrapper">
         <table>
           <thead>
-            <tr><th>Date</th><th>Type</th><th>Description</th><th>Party</th><th>Reference</th><th>Wallet</th><th className="text-red">Debit</th><th className="text-green">Credit</th><th></th></tr>
+            <tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Party</th><th>Ref</th><th>Wallet</th><th className="text-red">Debit (Dr)</th><th className="text-green">Credit (Cr)</th><th></th></tr>
           </thead>
           <tbody>
-            {entries.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>No entries yet.</td></tr>}
+            {entries.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>No entries yet.</td></tr>}
             {entries.map(e => (
               <tr key={e.id}>
-                <td style={{ fontSize: 12 }}>{e.date}</td>
-                <td><span className="badge badge-draft" style={{ fontSize: 10, textTransform: 'capitalize' }}>{e.type}</span></td>
-                <td>{e.description}</td>
+                <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{e.date}</td>
+                <td>
+                  <span className="badge badge-draft" style={{
+                    fontSize: 10, textTransform: 'capitalize',
+                    background: e.type === 'income' ? 'rgba(34,197,94,0.15)' : e.type === 'expense' ? 'rgba(220,38,38,0.15)' : 'rgba(59,130,246,0.15)',
+                    color: e.type === 'income' ? 'var(--green)' : e.type === 'expense' ? 'var(--red)' : 'var(--blue)',
+                  }}>{e.type}</span>
+                </td>
+                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.category || '—'}</td>
+                <td style={{ fontWeight: 500 }}>{e.description}</td>
                 <td style={{ fontSize: 12 }}>
                   {e.partyName ? (
                     <div>
                       <div style={{ fontWeight: 600 }}>{e.partyName}</div>
-                      {e.accountHeadID && <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{e.accountHeadID}</div>}
+                      {e.accountHeadID && <div style={{ fontSize: 10, color: 'var(--blue)', fontFamily: 'monospace' }}>{e.accountHeadID}</div>}
                     </div>
                   ) : '—'}
                 </td>
@@ -221,7 +348,12 @@ function DayBook() {
                 <td style={{ fontSize: 12 }}>{e.wallet}</td>
                 <td className="text-red bold">{e.debit ? `PKR ${Number(e.debit).toLocaleString()}` : '—'}</td>
                 <td className="text-green bold">{e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—'}</td>
-                <td><button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ id: e.id })}>🗑️</button></td>
+                <td>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-secondary btn-xs" onClick={() => setEditEntry(e)}>✏️</button>
+                    <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ id: e.id })}>🗑️</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -229,7 +361,14 @@ function DayBook() {
       </div>
 
       {masterAction && (
-        <MasterCodeModal title="Confirm Delete Entry" onSuccess={() => { deleteRecord('dayBook', masterAction.id); toast.success('Entry deleted.'); setMasterAction(null) }} onCancel={() => setMasterAction(null)} />
+        <MasterCodeModal title="Confirm Delete Entry" onSuccess={() => handleDelete(masterAction.id)} onCancel={() => setMasterAction(null)} />
+      )}
+      {editEntry && (
+        <EditEntryModal
+          entry={editEntry}
+          onClose={() => setEditEntry(null)}
+          onSave={async () => { setEditEntry(null); await refreshData() }}
+        />
       )}
     </div>
   )

@@ -59,6 +59,7 @@ function EmployeeRoutes() {
         <Routes>
           <Route index element={<EmployeeDashboard />} />
           <Route path="supply-orders" element={<SupplyOrders isEmployee />} />
+          <Route path="quotations" element={<Quotations isEmployee />} />
           <Route path="inventory" element={<Inventory isEmployee />} />
         </Routes>
       </AppLayout>
@@ -154,11 +155,21 @@ function ClientRequestsAdmin() {
                   <td style={{ fontSize: 12 }}>{q.date}</td>
                   <td>{(q.items || []).length}</td>
                   <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
-                  <td><span className={`badge badge-${q.status}`}>{q.status}</span></td>
+                  <td><span className={`badge badge-${q.status}`}>{q.status === 'cancelled' ? 'Rejected' : q.status}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-success btn-xs" onClick={() => updateRecord('quotations', q.id, { status: 'approved' })}>✅ Approve</button>
-                      <button className="btn btn-danger btn-xs" onClick={() => updateRecord('quotations', q.id, { status: 'cancelled' })}>✕ Reject</button>
+                      <button
+                        className="btn btn-success btn-xs"
+                        onClick={() => updateRecord('quotations', q.id, { status: 'approved' })}
+                        disabled={q.status === 'approved' || q.status === 'cancelled'}
+                        style={{ opacity: (q.status === 'approved' || q.status === 'cancelled') ? 0.4 : 1, cursor: (q.status === 'approved' || q.status === 'cancelled') ? 'not-allowed' : 'pointer' }}
+                      >✅ Approve</button>
+                      <button
+                        className="btn btn-danger btn-xs"
+                        onClick={() => updateRecord('quotations', q.id, { status: 'cancelled' })}
+                        disabled={q.status === 'approved' || q.status === 'cancelled'}
+                        style={{ opacity: (q.status === 'approved' || q.status === 'cancelled') ? 0.4 : 1, cursor: (q.status === 'approved' || q.status === 'cancelled') ? 'not-allowed' : 'pointer' }}
+                      >✕ Reject</button>
                     </div>
                   </td>
                 </tr>

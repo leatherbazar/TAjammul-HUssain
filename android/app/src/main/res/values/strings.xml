@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tataheer ERP</string>
+    <string name="title_activity_main">Tataheer ERP</string>
+    <string name="package_name">com.tataheer.erp</string>
+    <string name="custom_url_scheme">com.tataheer.erp</string>
+</resources>

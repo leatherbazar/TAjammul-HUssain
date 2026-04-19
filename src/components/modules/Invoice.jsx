@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportInvoicePDF } from '../../utils/pdfExport'
@@ -100,42 +101,77 @@ function PriceInput({ value, onChange, onBlur, style = {} }) {
 }
 
 // ─── Inline Editable Row (desktop table) ────────────────────────────────────
-function ItemRow({ item, index, onChange, onDelete }) {
-  const amount = (parseInt(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)
+function ItemRow({ item, index, onChange, onDelete, onMatrixChange }) {
+  const qty = item.useMatrix ? calcMatrixTotal(item.matrixRows) : (parseInt(item.qty) || 0)
+  const amount = qty * (parseFloat(item.unitPrice) || 0)
   return (
-    <tr>
-      <td style={{ width: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{index + 1}</td>
-      <td>
-        <input
-          className="input"
-          style={{ background: 'transparent', border: '1px solid transparent', padding: '6px 8px' }}
-          value={item.description}
-          onChange={e => onChange('description', e.target.value)}
-          placeholder="Item description"
-          spellCheck
-          onFocus={e => e.target.style.borderColor = 'var(--red)'}
-          onBlur={e => e.target.style.borderColor = 'transparent'}
-        />
-      </td>
-      <td style={{ width: 95 }}>
-        <QtyInput value={item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)} style={{ width: 82, padding: '6px 8px' }} />
-      </td>
-      <td style={{ width: 135 }}>
-        <PriceInput value={item.unitPrice} onChange={v => onChange('unitPrice', v)} onBlur={v => onChange('unitPrice', v)} style={{ padding: '6px 8px 6px 34px' }} />
-      </td>
-      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--green)', paddingRight: 12, whiteSpace: 'nowrap', fontSize: 13 }}>
-        PKR {amount.toLocaleString()}
-      </td>
-      <td style={{ width: 36, textAlign: 'center' }}>
-        <button className="btn btn-danger btn-xs" onClick={onDelete} title="Remove row" style={{ padding: '3px 8px' }}>✕</button>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td style={{ width: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{index + 1}</td>
+        <td>
+          <input
+            className="input"
+            style={{ background: 'transparent', border: '1px solid transparent', padding: '6px 8px' }}
+            value={item.description}
+            onChange={e => onChange('description', e.target.value)}
+            placeholder="Item description"
+            spellCheck
+            onFocus={e => e.target.style.borderColor = 'var(--red)'}
+            onBlur={e => e.target.style.borderColor = 'transparent'}
+          />
+        </td>
+        <td style={{ width: 110 }}>
+          <input
+            className="input"
+            style={{ background: 'transparent', border: '1px solid transparent', padding: '6px 8px', fontSize: 12 }}
+            value={item.color || ''}
+            onChange={e => onChange('color', e.target.value)}
+            placeholder="e.g. Black"
+            disabled={item.useMatrix}
+          />
+        </td>
+        <td style={{ width: 95 }}>
+          <QtyInput
+            value={item.useMatrix ? qty : item.qty}
+            onChange={v => onChange('qty', v)}
+            onBlur={v => onChange('qty', v)}
+            style={{ width: 82, padding: '6px 8px', opacity: item.useMatrix ? 0.6 : 1 }}
+          />
+        </td>
+        <td style={{ width: 135 }}>
+          <PriceInput value={item.unitPrice} onChange={v => onChange('unitPrice', v)} onBlur={v => onChange('unitPrice', v)} style={{ padding: '6px 8px 6px 34px' }} />
+        </td>
+        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--green)', paddingRight: 12, whiteSpace: 'nowrap', fontSize: 13 }}>
+          PKR {amount.toLocaleString()}
+        </td>
+        <td style={{ width: 60, textAlign: 'center' }}>
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            <button
+              className={`btn btn-xs ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
+              onClick={() => onChange('useMatrix', !item.useMatrix)}
+              title="Toggle size/color matrix"
+              style={{ padding: '3px 6px', fontSize: 13 }}
+            >🎨</button>
+            <button className="btn btn-danger btn-xs" onClick={onDelete} title="Remove row" style={{ padding: '3px 8px' }}>✕</button>
+          </div>
+        </td>
+      </tr>
+      {item.useMatrix && (
+        <tr>
+          <td colSpan={8} style={{ padding: '0 8px 10px 40px', background: 'rgba(245,158,11,0.04)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', marginBottom: 6, marginTop: 6 }}>🎨 Size & Color Breakdown</div>
+            <AttributeMatrix rows={item.matrixRows || []} onChange={onMatrixChange} />
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
 // ─── Mobile Card (stacked layout) ───────────────────────────────────────────
-function ItemCard({ item, index, onChange, onDelete }) {
-  const amount = (parseInt(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)
+function ItemCard({ item, index, onChange, onDelete, onMatrixChange }) {
+  const qty = item.useMatrix ? calcMatrixTotal(item.matrixRows) : (parseInt(item.qty) || 0)
+  const amount = qty * (parseFloat(item.unitPrice) || 0)
   return (
     <div style={{ padding: '16px', borderRadius: 12, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.04)', marginBottom: 12 }}>
       {/* Header row */}
@@ -152,14 +188,38 @@ function ItemCard({ item, index, onChange, onDelete }) {
           style={{ fontSize: 17, padding: '12px 14px', minHeight: 50 }} />
       </div>
 
+      {/* Color + Matrix toggle */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 12, alignItems: 'flex-end' }}>
+        <div className="input-group">
+          <label className="input-label" style={{ fontSize: 13, marginBottom: 6 }}>Color (single)</label>
+          <input className="input" value={item.color || ''} onChange={e => onChange('color', e.target.value)}
+            placeholder="e.g. Black" disabled={item.useMatrix} />
+        </div>
+        <button
+          className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
+          onClick={() => onChange('useMatrix', !item.useMatrix)}
+          style={{ marginBottom: 2, whiteSpace: 'nowrap' }}
+        >
+          🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}
+        </button>
+      </div>
+
+      {/* Matrix (when active) */}
+      {item.useMatrix && (
+        <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', marginBottom: 8 }}>🎨 Size & Color Breakdown</div>
+          <AttributeMatrix rows={item.matrixRows || []} onChange={onMatrixChange} />
+        </div>
+      )}
+
       {/* QTY + PRICE big fields */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         <div className="input-group">
           <label className="input-label" style={{ color: 'var(--blue)', fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
-            QTY ✏️
+            QTY {item.useMatrix ? '(auto)' : '✏️'}
           </label>
-          <QtyInput value={item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)}
-            style={{ padding: '16px 10px', fontSize: 26, width: '100%', minHeight: 62, letterSpacing: 1 }} />
+          <QtyInput value={item.useMatrix ? qty : item.qty} onChange={v => onChange('qty', v)} onBlur={v => onChange('qty', v)}
+            style={{ padding: '16px 10px', fontSize: 26, width: '100%', minHeight: 62, letterSpacing: 1, opacity: item.useMatrix ? 0.6 : 1 }} />
         </div>
         <div className="input-group">
           <label className="input-label" style={{ color: 'var(--amber)', fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
@@ -313,10 +373,13 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         items: (fromQuotation.items || []).map(i => ({
           id: Date.now() + Math.random(),
           description: i.description || '',
+          color: i.color || '',
           qty: i.useMatrix
-            ? (i.matrixRows || []).reduce((s, r) => s + Object.values(r.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0), 0)
+            ? calcMatrixTotal(i.matrixRows || [])
             : (parseInt(i.qty) || 1),
           unitPrice: parseFloat(i.unitPrice) || 0,
+          useMatrix: i.useMatrix || false,
+          matrixRows: i.matrixRows || [],
         })),
         taxRate: fromQuotation.taxRate || 0,
         customTax: '',
@@ -335,7 +398,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
       clientContact: '',
       date: new Date().toISOString().slice(0, 10),
       dueDate: '',
-      items: [{ id: Date.now(), description: '', qty: 1, unitPrice: 0 }],
+      items: [{ id: Date.now(), description: '', color: '', qty: 1, unitPrice: 0, useMatrix: false, matrixRows: [] }],
       taxRate: 0,
       customTax: '',
       advancePaid: 0,
@@ -347,18 +410,44 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  // ── Auto-resolve accountHeadID when converting from quotation ───────────────
+  // If clientName is pre-filled from the quote but accountHeadID is missing,
+  // search contacts by name and auto-link the account.
+  useEffect(() => {
+    if (!fromQuotation) return
+    if (form.accountHeadID) return  // already linked
+    if (!form.clientName) return
+    fetch(`/api/contacts/search?q=${encodeURIComponent(form.clientName)}&type=client`)
+      .then(r => r.json())
+      .then(d => {
+        const matches = d.contacts || []
+        // Only auto-link if exactly one match (unambiguous)
+        if (matches.length === 1) {
+          setForm(f => ({ ...f, accountHeadID: matches[0].accountHeadID }))
+        }
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const updateItem = useCallback((id, field, value) => {
     setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, [field]: value } : i) }))
   }, [])
 
   const addBlankRow = () => setForm(f => ({
-    ...f, items: [...f.items, { id: Date.now(), description: '', qty: 1, unitPrice: 0 }]
+    ...f, items: [...f.items, { id: Date.now(), description: '', color: '', qty: 1, unitPrice: 0, useMatrix: false, matrixRows: [] }]
   }))
+
+  const updateMatrix = useCallback((id, rows) => {
+    setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, matrixRows: rows } : i) }))
+  }, [])
 
   const deleteRow = (id) => setForm(f => ({ ...f, items: f.items.filter(i => i.id !== id) }))
 
   const effectiveTax = form.taxRate === -1 ? parseFloat(form.customTax || 0) : (form.taxRate || 0)
-  const subtotal = form.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0)
+  const subtotal = form.items.reduce((s, i) => {
+    const qty = i.useMatrix ? calcMatrixTotal(i.matrixRows) : (parseInt(i.qty) || 0)
+    return s + qty * (parseFloat(i.unitPrice) || 0)
+  }, 0)
   const taxAmount = subtotal * effectiveTax / 100
   const total = subtotal + taxAmount
   const balance = total - (parseFloat(form.advancePaid) || 0)
@@ -366,6 +455,10 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
   const handleSave = () => {
     if (!form.clientName) { toast.error('Client name required.'); return }
     if (form.items.length === 0) { toast.error('Add at least one item.'); return }
+    if (!form.accountHeadID) {
+      // Warn but allow — ledger entry just won't fire
+      toast('⚠️ No client account linked — ledger will not update. Search & select the client from the dropdown to link.', { duration: 5000 })
+    }
     const num = form.number || nextInvoiceNumber()
     onSave({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax })
   }
@@ -460,15 +553,16 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
               <tr>
                 <th style={{ width: 32 }}>#</th>
                 <th>Description</th>
+                <th style={{ width: 110, color: 'var(--text-muted)' }}>Color</th>
                 <th style={{ textAlign: 'center', color: 'var(--blue)', width: 95 }}>Qty ✏️</th>
                 <th style={{ color: 'var(--amber)', width: 135 }}>Unit Price ✏️</th>
                 <th style={{ textAlign: 'right' }}>Amount</th>
-                <th style={{ width: 36 }}></th>
+                <th style={{ width: 60 }}></th>
               </tr>
             </thead>
             <tbody>
               {form.items.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
                   No items — click "+ Add Row"
                 </td></tr>
               )}
@@ -479,10 +573,11 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
                   index={idx}
                   onChange={(field, value) => updateItem(item.id, field, value)}
                   onDelete={() => deleteRow(item.id)}
+                  onMatrixChange={rows => updateMatrix(item.id, rows)}
                 />
               ))}
               <tr>
-                <td colSpan={6} style={{ padding: '6px 8px' }}>
+                <td colSpan={8} style={{ padding: '6px 8px' }}>
                   <button className="btn btn-secondary btn-xs" onClick={addBlankRow} style={{ width: '100%' }}>
                     + Add Blank Row
                   </button>
@@ -504,6 +599,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
               index={idx}
               onChange={(field, value) => updateItem(item.id, field, value)}
               onDelete={() => deleteRow(item.id)}
+              onMatrixChange={rows => updateMatrix(item.id, rows)}
             />
           ))}
           <button className="btn btn-secondary btn-sm" onClick={addBlankRow} style={{ width: '100%', marginTop: 4 }}>
@@ -639,7 +735,16 @@ export default function Invoices() {
   }
 
   const handleGenerateDN = (dnData) => {
-    const num = `DN-${Date.now().toString().slice(-5)}`
+    // Smart numbering: DN-201/1, DN-201/2 per invoice
+    let num
+    if (dnData.invoiceRef) {
+      const existing = (data.deliveryNotes || []).filter(n => n.invoiceRef === dnData.invoiceRef)
+      const part = existing.length + 1
+      const invSuffix = dnData.invoiceRef.replace(/^[A-Za-z]+-/, '') // "INV-201" → "201"
+      num = `DN-${invSuffix}/${part}`
+    } else {
+      num = `DN-${Date.now().toString().slice(-5)}`
+    }
     addRecord('deliveryNotes', { ...dnData, number: num })
     toast.success(`Delivery Note ${num} created!`)
     setDnModal(null)
