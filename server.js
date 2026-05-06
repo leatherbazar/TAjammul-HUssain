@@ -275,6 +275,11 @@ mongoose.connection.once('open', async () => {
     await Singleton.findOneAndUpdate({ key: 'settings' }, { $setOnInsert: { value: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' } } }, { upsert: true })
     await Singleton.findOneAndUpdate({ key: 'masterCode' }, { $setOnInsert: { value: '5555' } }, { upsert: true })
     await Singleton.findOneAndUpdate({ key: 'securitySettings' }, { $setOnInsert: { value: { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' } } }, { upsert: true })
+    // ── Companies (multi-company support) ─────────────────────────────────────
+    await Singleton.findOneAndUpdate({ key: 'companies' }, { $setOnInsert: { value: [
+      { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '426- Ali Arcade, 13-km Main Multan Road, Lahore', phone: '+92(314)4094900', email: 'tataheertraders@gmail.com', active: true },
+      { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '', phone: '', email: '', active: true },
+    ]}}, { upsert: true })
     await User.findOneAndUpdate(
       { role: 'admin' },
       { $set: { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', name: 'Administrator', role: 'admin' }, $setOnInsert: { id: 'admin' } },
@@ -714,30 +719,37 @@ app.delete('/api/dayBook/:id', async (req, res) => {
 app.get('/api/data', async (req, res) => {
   try {
     const result = {}
+    // Company filter: TAT includes legacy records (no companyId), INF is strict
+    const cid = req.query.company || 'TAT'
+    const txFilter = cid === 'TAT'
+      ? { $or: [{ companyId: 'TAT' }, { companyId: { $exists: false } }, { companyId: null }] }
+      : { companyId: cid }
 
-    // Contacts from dedicated model
+    // Contacts — SHARED across all companies
     const contacts = await Contact.find().sort({ createdAt: -1 }).lean()
     result.contacts = contacts.map(fmtLean)
 
-    // Invoices from dedicated model
-    const invoices = await Invoice.find().sort({ createdAt: -1 }).lean()
+    // Invoices — company-specific
+    const invoices = await Invoice.find(txFilter).sort({ createdAt: -1 }).lean()
     result.invoices = invoices.map(fmtLean)
 
-    // Purchases and Sales from dedicated models
+    // Purchases and Sales — company-specific
     const [purchases, sales] = await Promise.all([
-      Purchase.find().sort({ createdAt: -1 }).lean(),
-      Sale.find().sort({ createdAt: -1 }).lean(),
+      Purchase.find(txFilter).sort({ createdAt: -1 }).lean(),
+      Sale.find(txFilter).sort({ createdAt: -1 }).lean(),
     ])
     result.purchases = purchases.map(fmtLean)
     result.sales     = sales.map(fmtLean)
 
-    // Other collections
+    // Other collections — company-specific except inventory & calendarEvents (shared)
+    const SHARED_COLLECTIONS = ['inventory', 'calendarEvents']
     for (const name of OTHER_COLLECTIONS) {
-      const docs = await models[name].find().sort({ createdAt: -1 }).lean()
+      const filter = SHARED_COLLECTIONS.includes(name) ? {} : txFilter
+      const docs = await models[name].find(filter).sort({ createdAt: -1 }).lean()
       result[name] = docs.map(fmtLean)
     }
 
-    // Users
+    // Users — SHARED
     const [employees, clients, admin] = await Promise.all([
       User.find({ role: 'employee' }).lean(),
       User.find({ role: 'client' }).lean(),
@@ -750,16 +762,23 @@ app.get('/api/data', async (req, res) => {
     }
 
     // Singletons
-    const [walletDoc, settingsDoc, masterDoc, secDoc] = await Promise.all([
+    const [walletDoc, settingsDoc, masterDoc, secDoc, companiesDoc] = await Promise.all([
       Singleton.findOne({ key: 'wallets' }).lean(),
       Singleton.findOne({ key: 'settings' }).lean(),
       Singleton.findOne({ key: 'masterCode' }).lean(),
       Singleton.findOne({ key: 'securitySettings' }).lean(),
+      Singleton.findOne({ key: 'companies' }).lean(),
     ])
     result.wallets          = walletDoc?.value   || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
     result.settings         = settingsDoc?.value || { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
     result.securitySettings = secDoc?.value      || { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' }
-    result.masterCode = masterDoc?.value   || '5555'
+    result.masterCode       = masterDoc?.value   || '5555'
+    result.companies        = companiesDoc?.value || []
+    // Active company settings (for invoice counter, company name, etc.)
+    const activeCompany = (companiesDoc?.value || []).find(c => c.id === cid)
+    if (activeCompany) {
+      result.settings = { ...result.settings, invoiceCounter: activeCompany.invoiceCounter, companyName: activeCompany.name }
+    }
 
     res.json(result)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -1436,6 +1455,41 @@ app.put('/api/settings', async (req, res) => {
 app.put('/api/master-code', async (req, res) => {
   try { await Singleton.findOneAndUpdate({ key: 'masterCode' }, { value: req.body.masterCode }, { upsert: true }); res.json({ ok: true }) }
   catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  COMPANIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/companies', async (req, res) => {
+  try {
+    const doc = await Singleton.findOne({ key: 'companies' }).lean()
+    res.json(doc?.value || [])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/companies/:id', async (req, res) => {
+  try {
+    const doc = await Singleton.findOne({ key: 'companies' }).lean()
+    const companies = doc?.value || []
+    const updated = companies.map(c => c.id === req.params.id ? { ...c, ...req.body } : c)
+    await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
+    res.json(updated)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Atomically get next invoice number for a company and increment its counter
+app.post('/api/companies/:id/next-invoice', async (req, res) => {
+  try {
+    const doc = await Singleton.findOne({ key: 'companies' }).lean()
+    const companies = doc?.value || []
+    const company = companies.find(c => c.id === req.params.id)
+    if (!company) return res.status(404).json({ error: 'Company not found' })
+    const num = company.invoiceCounter || 1
+    const updated = companies.map(c => c.id === req.params.id ? { ...c, invoiceCounter: num + 1 } : c)
+    await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
+    res.json({ number: `INV-${num}`, next: num + 1 })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
