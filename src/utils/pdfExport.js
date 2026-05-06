@@ -69,13 +69,38 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
     doc.text(profile.name, 14, 16)
   }
 
-  // Address below logo
+  // Address + contact icons below logo
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
-  doc.text(profile.address, 8, 27)
-  const contactLine = [profile.phone && `Tel: ${profile.phone}`, profile.email && `Email: ${profile.email}`].filter(Boolean).join('   ')
-  if (contactLine) doc.text(contactLine, 8, 33)
+
+  // Helper: draw a small icon dot with label
+  const iconDot = (x, y, r, g, b) => {
+    doc.setFillColor(r, g, b)
+    doc.circle(x, y - 1.2, 1.2, 'F')
+  }
+
+  // Address icon (orange dot) + text
+  if (profile.address) {
+    iconDot(9.5, 27, 200, 100, 30)
+    doc.setTextColor(80, 80, 80)
+    doc.text(profile.address, 13, 27)
+  }
+
+  // Phone icon (green dot) + Email icon (blue dot) on same line
+  let cx = 13
+  if (profile.phone) {
+    iconDot(9.5, 33, 40, 160, 80)
+    doc.setTextColor(80, 80, 80)
+    doc.text(profile.phone, cx, 33)
+    cx += doc.getTextWidth(profile.phone) + 8
+  }
+  if (profile.email) {
+    const eIconX = cx + 1.5
+    iconDot(eIconX, 33, 50, 100, 200)
+    doc.setTextColor(80, 80, 80)
+    doc.text(profile.email, eIconX + 3.5, 33)
+  }
 
   // Document title (right, dark red)
   doc.setFontSize(14)
