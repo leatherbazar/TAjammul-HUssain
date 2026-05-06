@@ -4,6 +4,7 @@ import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportInvoicePDF } from '../../utils/pdfExport'
+import Attachments from '../common/Attachments'
 import { calcExpr } from '../../utils/calcExpr'
 import toast from 'react-hot-toast'
 
@@ -358,7 +359,7 @@ function GenerateDNModal({ invoice, existingDNs, onGenerate, onCancel }) {
 
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
 function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
-  const { data, nextInvoiceNumber, currentCompany } = useApp()
+  const { data, nextInvoiceNumber, currentCompany, currentUser } = useApp()
   const [form, setForm] = useState(() => {
     if (fromQuotation) {
       return {
@@ -660,6 +661,8 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           <label className="input-label">Notes</label>
           <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />
         </div>
+
+        <Attachments refId={initial?.id} refType="invoice" uploadedBy={currentUser?.name} />
       </div>
 
       {/* Actions */}

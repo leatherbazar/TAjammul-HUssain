@@ -6,6 +6,7 @@ import MasterCodeModal from '../common/MasterCodeModal'
 import { calcExpr } from '../../utils/calcExpr'
 import ContactSelect from '../common/ContactSelect'
 import { exportQuotationPDF } from '../../utils/pdfExport'
+import Attachments from '../common/Attachments'
 import { exportQuotationExcel } from '../../utils/excelExport'
 import toast from 'react-hot-toast'
 
@@ -13,7 +14,7 @@ const EMPTY_ITEM = () => ({ id: Date.now(), description: '', color: '', qty: 1, 
 const TAX_OPTIONS = [{ label: '0%', val: 0 }, { label: '5.5%', val: 5.5 }, { label: '15%', val: 15 }, { label: '18%', val: 18 }, { label: 'Custom', val: -1 }]
 
 function QuotationForm({ initial, onSave, onCancel, clients }) {
-  const { data } = useApp()
+  const { data, currentUser } = useApp()
   const [form, setForm] = useState(initial || {
     clientName: '', clientContact: '', clientId: '',
     date: new Date().toISOString().slice(0, 10),
@@ -182,6 +183,8 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
           </div>
         </div>
       </div>
+
+      <Attachments refId={initial?.id} refType="quotation" uploadedBy={currentUser?.name} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>

@@ -4,11 +4,12 @@ import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportDeliveryNotePDF } from '../../utils/pdfExport'
+import Attachments from '../common/Attachments'
 import { calcExpr } from '../../utils/calcExpr'
 import toast from 'react-hot-toast'
 
 function DeliveryNoteForm({ initial, onSave, onCancel }) {
-  const { data } = useApp()
+  const { data, currentUser } = useApp()
   const [form, setForm] = useState(initial || {
     clientName: '', clientContact: '', accountHeadID: '', deliveryAddress: '',
     invoiceRef: '',
@@ -188,6 +189,8 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
           <label className="input-label">General Notes</label>
           <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />
         </div>
+
+        <Attachments refId={initial?.id} refType="delivery-note" uploadedBy={currentUser?.name} />
       </div>
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

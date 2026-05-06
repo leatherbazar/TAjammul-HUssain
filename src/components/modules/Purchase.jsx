@@ -2,10 +2,11 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import ContactSelect from '../common/ContactSelect'
 import MasterCodeModal from '../common/MasterCodeModal'
+import Attachments from '../common/Attachments'
 import toast from 'react-hot-toast'
 
 // ─── Direct Purchase Form ─────────────────────────────────────────────────────
-function PurchaseForm({ initial, onSave, onCancel }) {
+function PurchaseForm({ initial, onSave, onCancel, currentUser }) {
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState(initial || {
     supplierName: '', supplierContact: '', accountHeadID: '',
@@ -135,6 +136,8 @@ function PurchaseForm({ initial, onSave, onCancel }) {
         </div>
       </div>
 
+      <Attachments refId={initial?.id} refType="purchase" uploadedBy={currentUser?.name} />
+
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
@@ -214,7 +217,7 @@ function ConvertSOModal({ order, onConfirm, onCancel }) {
 
 // ─── Main Purchase Module ─────────────────────────────────────────────────────
 export default function Purchases() {
-  const { data, addRecord, updateRecord, deleteRecord, refreshData } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, refreshData, currentUser } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [convertModal, setConvertModal] = useState(null) // supply order to convert
@@ -288,6 +291,7 @@ export default function Purchases() {
           initial={selected}
           onSave={handleDirectPurchase}
           onCancel={() => { setView('list'); setSelected(null) }}
+          currentUser={currentUser}
         />
       </div>
     )

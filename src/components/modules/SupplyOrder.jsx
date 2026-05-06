@@ -4,6 +4,7 @@ import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportSupplyOrderPDF } from '../../utils/pdfExport'
+import Attachments from '../common/Attachments'
 import toast from 'react-hot-toast'
 
 function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser }) {
@@ -194,6 +195,8 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           )
         })()}
       </div>
+
+      <Attachments refId={initial?.id} refType="supply-order" uploadedBy={currentUser?.name} />
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
