@@ -133,15 +133,18 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
 
   // Client info box
   doc.setFillColor(240, 240, 245)
-  doc.roundedRect(12, y, 90, 20, 2, 2, 'F')
+  const qBoxH = [quotation.clientAddress, quotation.clientContact].filter(Boolean).length * 6 + 14
+  doc.roundedRect(12, y, 186, qBoxH, 2, 2, 'F')
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(40, 40, 40)
   doc.text('Bill To:', 16, y + 6)
   doc.setFont('helvetica', 'normal')
   doc.text(quotation.clientName || '—', 16, y + 12)
-  doc.text(quotation.clientContact || '', 16, y + 17)
-  y += 26
+  let qBy = y + 12
+  if (quotation.clientAddress) { qBy += 6; doc.text(quotation.clientAddress, 16, qBy) }
+  if (quotation.clientContact) { qBy += 6; doc.text(`Tel: ${quotation.clientContact}`, 16, qBy) }
+  y += qBoxH + 6
 
   const items = quotation.items || []
   const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)
@@ -214,12 +217,16 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
 
   let y = 50
   doc.setFillColor(240, 240, 245)
-  doc.roundedRect(12, y, 90, 16, 2, 2, 'F')
+  const iBoxH = [invoice.clientAddress, invoice.clientContact].filter(Boolean).length * 6 + 14
+  doc.roundedRect(12, y, 186, iBoxH, 2, 2, 'F')
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
   doc.text('Bill To:', 16, y + 6)
   doc.setFont('helvetica', 'normal')
   doc.text(invoice.clientName || '—', 16, y + 12)
-  y += 22
+  let iBy = y + 12
+  if (invoice.clientAddress) { iBy += 6; doc.text(invoice.clientAddress, 16, iBy) }
+  if (invoice.clientContact) { iBy += 6; doc.text(`Tel: ${invoice.clientContact}`, 16, iBy) }
+  y += iBoxH + 6
 
   const items = invoice.items || []
   const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)
@@ -430,13 +437,18 @@ export async function exportDeliveryNotePDF(note, company = null) {
   await addHeader(doc, 'DELIVERY NOTE', note.number, note.date, false, company)
 
   let y = 50
+  const dnBoxH = [note.deliveryAddress, note.clientContact].filter(Boolean).length * 6 + 14
+  doc.setFillColor(240, 240, 245)
+  doc.roundedRect(12, y, 186, dnBoxH, 2, 2, 'F')
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
-  doc.text('To:', 14, y)
+  doc.text('Deliver To:', 16, y + 6)
   doc.setFont('helvetica', 'normal')
-  doc.text(`${note.clientName || '—'}   ${note.clientContact || ''}`, 24, y)
-  if (note.deliveryAddress) { y += 6; doc.text(`Address: ${note.deliveryAddress}`, 14, y) }
-  if (note.driverName || note.vehicleNo) { y += 6; doc.text(`Driver: ${note.driverName || '—'}   Vehicle: ${note.vehicleNo || '—'}`, 14, y) }
-  y += 12
+  doc.text(note.clientName || '—', 16, y + 12)
+  let dnBy = y + 12
+  if (note.deliveryAddress) { dnBy += 6; doc.text(note.deliveryAddress, 16, dnBy) }
+  if (note.clientContact) { dnBy += 6; doc.text(`Tel: ${note.clientContact}`, 16, dnBy) }
+  y += dnBoxH + 6
+  if (note.driverName || note.vehicleNo) { doc.setFontSize(9); doc.setTextColor(80,80,80); doc.text(`Driver: ${note.driverName || '—'}   Vehicle: ${note.vehicleNo || '—'}`, 14, y); y += 8 }
 
   const items = note.items || []
   const hasColor  = items.some(i => i.useMatrix ? (i.matrixRows || []).some(r => r.color) : !!i.color)

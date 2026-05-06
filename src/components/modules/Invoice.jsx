@@ -369,6 +369,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         accountHeadID: fromQuotation.accountHeadID || '',
         clientName: fromQuotation.clientName || '',
         clientContact: fromQuotation.clientContact || '',
+        clientAddress: fromQuotation.clientAddress || '',
         date: new Date().toISOString().slice(0, 10),
         dueDate: '',
         items: (fromQuotation.items || []).map(i => ({
@@ -397,6 +398,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
       accountHeadID: '',
       clientName: '',
       clientContact: '',
+      clientAddress: '',
       date: new Date().toISOString().slice(0, 10),
       dueDate: '',
       items: [{ id: Date.now(), description: '', color: '', qty: 1, unitPrice: 0, useMatrix: false, matrixRows: [] }],
@@ -498,6 +500,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
               }}
               onContactSelect={contact => {
                 if (contact?.phone) setField('clientContact', contact.phone)
+                if (contact?.address) setField('clientAddress', contact.address)
               }}
               placeholder="Search or type client name..."
             />
@@ -510,6 +513,10 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           <div className="input-group">
             <label className="input-label">Contact</label>
             <input className="input" value={form.clientContact} onChange={e => setField('clientContact', e.target.value)} placeholder="+92..." />
+          </div>
+          <div className="input-group col-span-3">
+            <label className="input-label">Client Address</label>
+            <input className="input" value={form.clientAddress || ''} onChange={e => setField('clientAddress', e.target.value)} placeholder="Client address (appears on PDF)" />
           </div>
           <div className="input-group">
             <label className="input-label">Invoice # (auto = INV-201, 202...)</label>

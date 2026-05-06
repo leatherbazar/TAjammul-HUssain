@@ -16,7 +16,7 @@ const TAX_OPTIONS = [{ label: '0%', val: 0 }, { label: '5.5%', val: 5.5 }, { lab
 function QuotationForm({ initial, onSave, onCancel, clients }) {
   const { data, currentUser } = useApp()
   const [form, setForm] = useState(initial || {
-    clientName: '', clientContact: '', clientId: '',
+    clientName: '', clientContact: '', clientAddress: '', clientId: '',
     date: new Date().toISOString().slice(0, 10),
     items: [EMPTY_ITEM()],
     taxRate: 0, customTax: '', notes: '',
@@ -56,7 +56,7 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
               type="client"
               value={form.clientName}
               onChange={(name) => setField('clientName', name)}
-              onContactSelect={(c) => setField('clientContact', c.phone || form.clientContact)}
+              onContactSelect={(c) => { if (c?.phone) setField('clientContact', c.phone); if (c?.address) setField('clientAddress', c.address) }}
               placeholder="Select or type client..."
             />
           </div>
@@ -67,6 +67,10 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
           <div className="input-group">
             <label className="input-label">Date</label>
             <input type="date" className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
+          </div>
+          <div className="input-group col-span-3">
+            <label className="input-label">Client Address</label>
+            <input className="input" placeholder="Client address (appears on PDF)" value={form.clientAddress || ''} onChange={e => setField('clientAddress', e.target.value)} />
           </div>
           <div className="input-group col-span-3">
             <label className="input-label">Notes / Terms</label>

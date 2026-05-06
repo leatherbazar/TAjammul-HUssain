@@ -36,6 +36,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
       clientName: inv.clientName || '',
       clientContact: inv.clientContact || '',
       accountHeadID: inv.accountHeadID || '',
+      deliveryAddress: inv.clientAddress || '',
       items: (inv.items || []).map(i => ({
         id: Date.now() + Math.random(),
         description: i.description || '',
