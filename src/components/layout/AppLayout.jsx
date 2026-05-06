@@ -96,12 +96,42 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
         <span className={`role-badge role-${user?.role}`}>{user?.role}</span>
       </div>
 
-      <button className="btn btn-danger btn-sm" onClick={onLogout}>Logout</button>
+      <button className="btn btn-danger btn-sm" onClick={() => onLogout(false)}>Logout</button>
     </div>
   )
 }
 
-function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose }) {
+function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, onLogout }) {
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [isInstalled, setIsInstalled]     = useState(false)
+
+  useEffect(() => {
+    // Capture the install prompt
+    const handler = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true)
+    }
+    window.addEventListener('appinstalled', () => setIsInstalled(true))
+
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const { outcome } = await installPrompt.userChoice
+    if (outcome === 'accepted') {
+      setInstallPrompt(null)
+      setIsInstalled(true)
+    }
+  }
+
   return (
     <>
       {/* Overlay — shown on mobile when sidebar is open */}
@@ -113,49 +143,128 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose }) {
         />
       )}
 
-      <div className={`sidebar no-print${sidebarOpen ? ' sidebar-open' : ''}`}>
-        {navItems.map((item, i) => {
-          if (item.section) return (
-            <div key={i} className="sidebar-section">{item.section}</div>
-          )
-          const isActive =
-            location.pathname === item.path ||
-            (
-              item.path !== '/admin' &&
-              item.path !== '/employee' &&
-              item.path !== '/client' &&
-              location.pathname.startsWith(item.path)
+      <div className={`sidebar no-print${sidebarOpen ? ' sidebar-open' : ''}`} style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Nav Items */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {navItems.map((item, i) => {
+            if (item.section) return (
+              <div key={i} className="sidebar-section">{item.section}</div>
             )
-          return (
+            const isActive =
+              location.pathname === item.path ||
+              (
+                item.path !== '/admin' &&
+                item.path !== '/employee' &&
+                item.path !== '/client' &&
+                location.pathname.startsWith(item.path)
+              )
+            return (
+              <button
+                key={i}
+                className={`nav-link ${isActive ? 'active' : ''}`}
+                onClick={() => {
+                  onNavigate(item.path)
+                  onClose()
+                }}
+              >
+                <span className="icon">{item.icon}</span>
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Bottom: Install + User ─────────────────────────────── */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 8 }}>
+          {/* Install App Button */}
+          {!isInstalled && installPrompt && (
             <button
-              key={i}
-              className={`nav-link ${isActive ? 'active' : ''}`}
-              onClick={() => {
-                onNavigate(item.path)
-                onClose() // close sidebar on mobile after navigating
+              onClick={handleInstall}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', padding: '10px 14px', marginBottom: 10,
+                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                color: '#fff', border: 'none', borderRadius: 10,
+                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(37,99,235,0.4)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <span style={{ fontSize: 16 }}>📲</span> Install App
+            </button>
+          )}
+          {isInstalled && (
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#22c55e', marginBottom: 8, padding: '6px 0' }}>
+              ✅ App Installed
+            </div>
+          )}
+
+          {/* User Info + Logout */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px' }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: user?.role === 'admin' ? 'var(--red)' : user?.role === 'employee' ? 'var(--blue)' : 'var(--green)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0
+            }}>
+              {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{user?.role}</div>
+            </div>
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444', borderRadius: 6, padding: '3px 8px',
+                fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0
               }}
             >
-              <span className="icon">{item.icon}</span>
-              {item.label}
+              ↑ Out
             </button>
-          )
-        })}
+          </div>
+        </div>
       </div>
     </>
   )
 }
 
 export default function AppLayout({ children }) {
-  const { currentUser, setCurrentUser } = useApp()
+  const { currentUser, setCurrentUser, data } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleLogout = () => {
+  const handleLogout = (auto = false) => {
     setCurrentUser(null)
-    toast.success('Logged out successfully.')
+    // Log logout to audit
+    if (currentUser) {
+      fetch('/api/audit-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userName: currentUser.name, userRole: currentUser.role, action: 'logout', detail: auto ? 'Auto-logout due to inactivity' : 'Manual logout' }) }).catch(() => {})
+    }
+    toast.success(auto ? 'Auto-logged out due to inactivity.' : 'Logged out successfully.')
     navigate('/')
   }
+
+  // ── Auto Logout (session timeout) ────────────────────────────────────────────
+  useEffect(() => {
+    const timeoutMins = data?.securitySettings?.sessionTimeout || 30
+    const timeoutMs = timeoutMins * 60 * 1000
+    let timer
+    const reset = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => handleLogout(true), timeoutMs)
+    }
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach(e => window.addEventListener(e, reset))
+    reset()
+    return () => {
+      clearTimeout(timer)
+      events.forEach(e => window.removeEventListener(e, reset))
+    }
+  }, [data?.securitySettings?.sessionTimeout])
 
   // Close sidebar on route change (covers back-button navigation)
   useEffect(() => {
@@ -177,7 +286,7 @@ export default function AppLayout({ children }) {
       <Marquee />
       <Navbar
         user={currentUser}
-        onLogout={handleLogout}
+        onLogout={(auto) => handleLogout(auto)}
         onToggleSidebar={() => setSidebarOpen(v => !v)}
       />
       <div className="app-layout">
@@ -187,6 +296,8 @@ export default function AppLayout({ children }) {
           onNavigate={navigate}
           sidebarOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          user={currentUser}
+          onLogout={() => handleLogout(false)}
         />
         <div className="main-content fade-in">
           {children}

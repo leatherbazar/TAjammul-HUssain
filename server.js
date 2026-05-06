@@ -151,17 +151,32 @@ OTHER_COLLECTIONS.forEach(name => {
 
 // ── User ──────────────────────────────────────────────────────────────────────
 const User = mongoose.model('User', new mongoose.Schema({
-  id:       { type: String, index: true },
-  username: { type: String, unique: true, sparse: true },
-  password: String,
-  name:     String,
-  role:     { type: String, enum: ['admin', 'employee', 'client'] },
-  phone:    String,
-  email:    String,
-  company:  String,
-  address:  String,
-  active:   Boolean,
-  empRole:  String,
+  id:            { type: String, index: true },
+  username:      { type: String, unique: true, sparse: true },
+  password:      String,
+  name:          String,
+  role:          { type: String, enum: ['admin', 'employee', 'client'] },
+  phone:         String,
+  email:         String,
+  company:       String,
+  address:       String,
+  active:        Boolean,
+  hidden:        { type: Boolean, default: false },
+  empRole:       String,
+  loginAttempts: { type: Number, default: 0 },
+  lockedUntil:   Date,
+  lastLogin:     Date,
+  permissions:   { type: mongoose.Schema.Types.Mixed, default: {} },
+}, { timestamps: true }))
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+const AuditLog = mongoose.model('AuditLog', new mongoose.Schema({
+  id:       String,
+  userName: String,
+  userRole: String,
+  action:   String,
+  detail:   String,
+  ip:       String,
 }, { timestamps: true }))
 
 // ── Singleton (wallets, settings, masterCode) ─────────────────────────────────
@@ -239,6 +254,7 @@ mongoose.connection.once('open', async () => {
     await Singleton.findOneAndUpdate({ key: 'wallets' }, { $setOnInsert: { value: { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 } } }, { upsert: true })
     await Singleton.findOneAndUpdate({ key: 'settings' }, { $setOnInsert: { value: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' } } }, { upsert: true })
     await Singleton.findOneAndUpdate({ key: 'masterCode' }, { $setOnInsert: { value: '5555' } }, { upsert: true })
+    await Singleton.findOneAndUpdate({ key: 'securitySettings' }, { $setOnInsert: { value: { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' } } }, { upsert: true })
     await User.findOneAndUpdate(
       { role: 'admin' },
       { $set: { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', name: 'Administrator', role: 'admin' }, $setOnInsert: { id: 'admin' } },
@@ -257,10 +273,41 @@ mongoose.connection.once('open', async () => {
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body
-    const user = await User.findOne({ username, password })
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' })
-    if (user.role === 'employee' && user.active === false)
-      return res.status(401).json({ error: 'Account disabled. Contact admin.' })
+    const secDoc = await Singleton.findOne({ key: 'securitySettings' }).lean()
+    const sec = secDoc?.value || { maxLoginAttempts: 5, lockDuration: 15 }
+
+    const user = await User.findOne({ username })
+    if (!user) return res.status(401).json({ error: 'Invalid username or password.' })
+
+    // Check hidden
+    if (user.hidden) return res.status(401).json({ error: 'Account hidden. Contact administrator.' })
+    // Check disabled
+    if (user.role !== 'admin' && user.active === false) return res.status(401).json({ error: 'Account disabled. Contact admin.' })
+    // Check locked
+    if (user.lockedUntil && new Date() < new Date(user.lockedUntil)) {
+      const mins = Math.ceil((new Date(user.lockedUntil) - new Date()) / 60000)
+      return res.status(401).json({ error: `Account locked. Try again in ${mins} minute(s).` })
+    }
+
+    // Wrong password
+    if (user.password !== password) {
+      const attempts = (user.loginAttempts || 0) + 1
+      const update = { loginAttempts: attempts }
+      if (attempts >= sec.maxLoginAttempts) {
+        update.lockedUntil = new Date(Date.now() + (sec.lockDuration || 15) * 60000)
+        update.loginAttempts = 0
+        await User.findByIdAndUpdate(user._id, { $set: update })
+        await AuditLog.create({ id: Date.now().toString(), userName: username, userRole: user.role, action: 'account_locked', detail: `Locked after ${sec.maxLoginAttempts} failed attempts`, ip: req.ip })
+        return res.status(401).json({ error: `Too many failed attempts. Account locked for ${sec.lockDuration || 15} minutes.` })
+      }
+      await User.findByIdAndUpdate(user._id, { $set: update })
+      await AuditLog.create({ id: Date.now().toString(), userName: username, userRole: user.role, action: 'login_failed', detail: `Failed attempt ${attempts}/${sec.maxLoginAttempts}`, ip: req.ip })
+      return res.status(401).json({ error: `Invalid password. ${sec.maxLoginAttempts - attempts} attempt(s) remaining.` })
+    }
+
+    // Success
+    await User.findByIdAndUpdate(user._id, { $set: { loginAttempts: 0, lockedUntil: null, lastLogin: new Date() } })
+    await AuditLog.create({ id: Date.now().toString(), userName: user.name, userRole: user.role, action: 'login', detail: 'Logged in successfully', ip: req.ip })
     res.json(fmt(user))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -677,19 +724,21 @@ app.get('/api/data', async (req, res) => {
       User.findOne({ role: 'admin' }).lean(),
     ])
     result.users = {
-      admin: { username: admin?.username || 'admin', password: admin?.password || 'admin123', name: admin?.name || 'Administrator', role: 'admin' },
+      admin: { username: admin?.username || 'admin', password: admin?.password || 'admin123', name: admin?.name || 'Administrator', role: 'admin', lastLogin: admin?.lastLogin },
       employees: employees.map(fmtLean),
       clients:   clients.map(fmtLean),
     }
 
     // Singletons
-    const [walletDoc, settingsDoc, masterDoc] = await Promise.all([
+    const [walletDoc, settingsDoc, masterDoc, secDoc] = await Promise.all([
       Singleton.findOne({ key: 'wallets' }).lean(),
       Singleton.findOne({ key: 'settings' }).lean(),
       Singleton.findOne({ key: 'masterCode' }).lean(),
+      Singleton.findOne({ key: 'securitySettings' }).lean(),
     ])
-    result.wallets    = walletDoc?.value   || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
-    result.settings   = settingsDoc?.value || { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
+    result.wallets          = walletDoc?.value   || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
+    result.settings         = settingsDoc?.value || { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
+    result.securitySettings = secDoc?.value      || { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' }
     result.masterCode = masterDoc?.value   || '5555'
 
     res.json(result)
@@ -1209,6 +1258,107 @@ app.delete('/api/users/clients/:id', async (req, res) => {
 app.put('/api/users/admin', async (req, res) => {
   try { await User.findOneAndUpdate({ role: 'admin' }, { $set: req.body }); res.json({ ok: true }) }
   catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ─── SECURITY ENDPOINTS ───────────────────────────────────────────────────────
+
+// Forgot password (show password for internal use)
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { username } = req.body
+    if (!username) return res.status(400).json({ error: 'Username is required.' })
+    const user = await User.findOne({ username }).lean()
+    if (!user) return res.status(404).json({ error: 'No account found with that username.' })
+    res.json({ password: user.password, name: user.name, role: user.role })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Reset password using recovery PIN or backup code
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { username, pin, newPassword, backupCode } = req.body
+    if (!username || !newPassword) return res.status(400).json({ error: 'Username and new password required.' })
+    const secDoc = await Singleton.findOne({ key: 'securitySettings' }).lean()
+    const sec = secDoc?.value || {}
+    const validPin = pin && String(pin) === String(sec.recoveryPin)
+    const validBackup = backupCode && backupCode === sec.backupCode
+    if (!validPin && !validBackup) return res.status(401).json({ error: 'Invalid recovery PIN or backup code.' })
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+    const user = await User.findOneAndUpdate({ username }, { $set: { password: newPassword, loginAttempts: 0, lockedUntil: null } }, { new: true })
+    if (!user) return res.status(404).json({ error: 'User not found.' })
+    await AuditLog.create({ id: Date.now().toString(), userName: username, userRole: user.role, action: 'password_reset', detail: 'Password reset via recovery PIN', ip: req.ip })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Admin change any user password
+app.post('/api/admin/change-password', async (req, res) => {
+  try {
+    const { username, newPassword, adminName } = req.body
+    if (!username || !newPassword) return res.status(400).json({ error: 'Username and new password required.' })
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+    const user = await User.findOneAndUpdate({ username }, { $set: { password: newPassword } }, { new: true })
+    if (!user) return res.status(404).json({ error: 'User not found.' })
+    await AuditLog.create({ id: Date.now().toString(), userName: adminName || 'Admin', userRole: 'admin', action: 'password_changed', detail: `Changed password for ${username} (${user.role})`, ip: req.ip })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Toggle hide/unhide user account
+app.put('/api/users/:id/hide', async (req, res) => {
+  try {
+    const user = await User.findOne({ id: req.params.id })
+    if (!user) return res.status(404).json({ error: 'User not found.' })
+    user.hidden = !user.hidden
+    await user.save()
+    await AuditLog.create({ id: Date.now().toString(), userName: 'Admin', userRole: 'admin', action: user.hidden ? 'account_hidden' : 'account_unhidden', detail: `${user.hidden ? 'Hidden' : 'Unhidden'} account: ${user.username}`, ip: req.ip })
+    res.json({ ok: true, hidden: user.hidden })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Unlock locked account
+app.put('/api/users/:id/unlock', async (req, res) => {
+  try {
+    await User.findOneAndUpdate({ id: req.params.id }, { $set: { loginAttempts: 0, lockedUntil: null } })
+    await AuditLog.create({ id: Date.now().toString(), userName: 'Admin', userRole: 'admin', action: 'account_unlocked', detail: `Unlocked account id: ${req.params.id}`, ip: req.ip })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Update employee module permissions
+app.put('/api/users/:id/permissions', async (req, res) => {
+  try {
+    await User.findOneAndUpdate({ id: req.params.id }, { $set: { permissions: req.body.permissions } })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Security settings
+app.get('/api/security-settings', async (req, res) => {
+  try {
+    const doc = await Singleton.findOne({ key: 'securitySettings' }).lean()
+    res.json(doc?.value || { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+app.put('/api/security-settings', async (req, res) => {
+  try {
+    await Singleton.findOneAndUpdate({ key: 'securitySettings' }, { $set: { value: req.body } }, { upsert: true })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Audit log
+app.get('/api/audit-log', async (req, res) => {
+  try {
+    const logs = await AuditLog.find().sort({ createdAt: -1 }).limit(200).lean()
+    res.json(logs.map(fmtLean))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+app.post('/api/audit-log', async (req, res) => {
+  try {
+    await AuditLog.create({ ...req.body, id: Date.now().toString() })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -22,7 +22,8 @@ const INITIAL_DATA = {
   calendarEvents: [],
   contacts: [],
   wallets: { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
-  settings: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
+  settings: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' },
+  securitySettings: { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' }
 }
 
 // ─── API HELPER ───────────────────────────────────────────────────────────────

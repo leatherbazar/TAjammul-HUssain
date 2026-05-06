@@ -1,0 +1,27 @@
+{
+  "name": "tat-erp",
+  "short_name": "TAT ERP",
+  "id": "taterp",
+  "description": "Tataheer Traders ERP — A powerful Enterprise Resource Planning system for managing invoices, quotations, inventory, purchases, sales, finance, and team operations. Built for Tataheer Business Group, Lahore. +92 321 855 5566",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#D11818",
+  "icons": [
+    {
+      "src": "/logo-tat.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-tat.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en"
+}
