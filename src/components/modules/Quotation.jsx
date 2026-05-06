@@ -77,9 +77,8 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
 
       {/* Items */}
       <div className="section-box">
-        <div className="section-title" style={{ justifyContent: 'space-between' }}>
+        <div className="section-title">
           <span>📦 Items</span>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add Item</button>
         </div>
 
         {form.items.map((item, idx) => {
@@ -145,6 +144,10 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
             </div>
           )
         })}
+
+        <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ width: '100%', marginBottom: 16 }}>
+          + Add Item
+        </button>
 
         {/* Tax & Totals */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
