@@ -105,13 +105,19 @@ function addFooter(doc, company = null) {
   const footerText = [profile.tagline, profile.email].filter(Boolean).join('  |  ')
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
-    doc.setFontSize(7.5)
-    doc.setTextColor(160, 160, 160)
     doc.setDrawColor(200, 200, 200)
     doc.setLineWidth(0.3)
-    doc.line(12, 285, pageW - 12, 285)
-    if (footerText) doc.text(footerText, 12, 289)
-    doc.text(`Page ${i} of ${pageCount}`, pageW - 12, 289, { align: 'right' })
+    doc.line(12, 281, pageW - 12, 281)
+    // Company tagline + email (left)
+    doc.setFontSize(7.5)
+    doc.setTextColor(160, 160, 160)
+    if (footerText) doc.text(footerText, 12, 285)
+    // Page number (right)
+    doc.text(`Page ${i} of ${pageCount}`, pageW - 12, 285, { align: 'right' })
+    // System generated notice (centered)
+    doc.setFontSize(7)
+    doc.setTextColor(180, 180, 180)
+    doc.text('System generated document. No signature and stamp required.', pageW / 2, 290, { align: 'center' })
   }
 }
 
@@ -142,12 +148,14 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
   const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
 
   const bodyRows = []
+  let srQ = 0
   items.forEach(item => {
     if (item.useMatrix && item.matrixRows?.length) {
       item.matrixRows.forEach(row => {
+        srQ++
         const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
         const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
-        const row_ = [item.description]
+        const row_ = [srQ, item.description]
         if (hasColor)  row_.push(row.color || '—')
         if (hasMatrix) row_.push(sizeStr || '—')
         row_.push(total)
@@ -155,7 +163,8 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
         bodyRows.push(row_)
       })
     } else {
-      const row_ = [item.description]
+      srQ++
+      const row_ = [srQ, item.description]
       if (hasColor)  row_.push(item.color || '')
       if (hasMatrix) row_.push('—')
       row_.push(item.qty || 0)
@@ -164,13 +173,13 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
     }
   })
 
-  const head = ['Description']
+  const head = ['Sr', 'Description']
   if (hasColor)  head.push('Color')
   if (hasMatrix) head.push('Sizes')
   head.push('Qty')
   if (!stealth) { head.push('Unit Price'); head.push('Amount') }
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (!stealth) {
     let finalY = doc.lastAutoTable.finalY + 10
@@ -217,12 +226,14 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
   const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
 
   const bodyRows = []
+  let srI = 0
   items.forEach(item => {
     if (item.useMatrix && item.matrixRows?.length) {
       item.matrixRows.forEach(row => {
+        srI++
         const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
         const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
-        const row_ = [item.description]
+        const row_ = [srI, item.description]
         if (hasColor)  row_.push(row.color || '—')
         if (hasMatrix) row_.push(sizeStr || '—')
         row_.push(total)
@@ -230,7 +241,8 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
         bodyRows.push(row_)
       })
     } else {
-      const row_ = [item.description]
+      srI++
+      const row_ = [srI, item.description]
       if (hasColor)  row_.push(item.color || '')
       if (hasMatrix) row_.push('—')
       row_.push(item.qty || 0)
@@ -239,13 +251,13 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
     }
   })
 
-  const head = ['Description']
+  const head = ['Sr', 'Description']
   if (hasColor)  head.push('Color')
   if (hasMatrix) head.push('Sizes')
   head.push('Qty')
   if (!stealth) { head.push('Unit Price'); head.push('Amount') }
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (!stealth) {
     const finalY = doc.lastAutoTable.finalY + 8
@@ -431,12 +443,14 @@ export async function exportDeliveryNotePDF(note, company = null) {
   const hasMatrix = items.some(i => i.useMatrix && (i.matrixRows || []).length > 0)
 
   const bodyRows = []
+  let srD = 0
   items.forEach(item => {
     if (item.useMatrix && item.matrixRows?.length) {
       item.matrixRows.forEach(row => {
+        srD++
         const total = Object.values(row.sizes || {}).reduce((a, b) => a + (parseInt(b) || 0), 0)
         const sizeStr = Object.entries(row.sizes || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')
-        const row_ = [item.description]
+        const row_ = [srD, item.description]
         if (hasColor)  row_.push(row.color || '—')
         if (hasMatrix) row_.push(sizeStr || '—')
         row_.push(total)
@@ -444,7 +458,8 @@ export async function exportDeliveryNotePDF(note, company = null) {
         bodyRows.push(row_)
       })
     } else {
-      const row_ = [item.description]
+      srD++
+      const row_ = [srD, item.description]
       if (hasColor)  row_.push(item.color || '')
       if (hasMatrix) row_.push('—')
       row_.push(item.qty || 0)
@@ -453,13 +468,13 @@ export async function exportDeliveryNotePDF(note, company = null) {
     }
   })
 
-  const head = ['Description']
+  const head = ['Sr', 'Description']
   if (hasColor)  head.push('Color')
   if (hasMatrix) head.push('Sizes')
   head.push('Qty')
   head.push('Note')
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (note.notes) {
     const finalY = doc.lastAutoTable.finalY + 8
