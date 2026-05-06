@@ -50,50 +50,50 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
   const pageW = doc.internal.pageSize.getWidth()
   const profile = getProfile(company)
 
-  // Header background — taller to fit bigger logo
+  // Header background
   doc.setFillColor(248, 248, 248)
-  doc.rect(0, 0, pageW, 56, 'F')
+  doc.rect(0, 0, pageW, 44, 'F')
 
-  // Logo — 1/3 larger than before (103mm × 27mm)
+  // Logo — exact size: 133mm × 18.7mm
   try {
     const img = await loadImg(profile.logoSrc)
     if (img) {
-      doc.addImage(img, 'PNG', 8, 3, 103, 27)
+      doc.addImage(img, 'PNG', 8, 3, 133, 18.7)
     } else {
       throw new Error('logo not loaded')
     }
   } catch {
-    doc.setFontSize(18)
+    doc.setFontSize(16)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 30, 30)
-    doc.text(profile.name, 14, 20)
+    doc.text(profile.name, 14, 16)
   }
 
   // Address below logo
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
-  doc.text(profile.address, 8, 36)
+  doc.text(profile.address, 8, 27)
   const contactLine = [profile.phone && `Tel: ${profile.phone}`, profile.email && `Email: ${profile.email}`].filter(Boolean).join('   ')
-  if (contactLine) doc.text(contactLine, 8, 43)
+  if (contactLine) doc.text(contactLine, 8, 33)
 
   // Document title (right, dark red)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(120, 0, 0)
-  doc.text(title, pageW - 12, 14, { align: 'right' })
+  doc.text(title, pageW - 12, 10, { align: 'right' })
 
   // Doc number & date
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(60, 60, 60)
-  doc.text(`No: ${docNumber}`, pageW - 12, 25, { align: 'right' })
-  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 34, { align: 'right' })
+  doc.text(`No: ${docNumber}`, pageW - 12, 20, { align: 'right' })
+  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 28, { align: 'right' })
 
   // Divider
   doc.setDrawColor(180, 180, 180)
   doc.setLineWidth(0.4)
-  doc.line(0, 56, pageW, 56)
+  doc.line(0, 44, pageW, 44)
 
   doc.setTextColor(0, 0, 0)
 }
@@ -123,7 +123,7 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
   const doc = new jsPDF()
   await addHeader(doc, 'QUOTATION', quotation.number || 'DRAFT', quotation.date, stealth, company)
 
-  let y = 62
+  let y = 50
 
   // Client info box
   doc.setFillColor(240, 240, 245)
@@ -203,7 +203,7 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
   const doc = new jsPDF()
   await addHeader(doc, 'INVOICE', invoice.number, invoice.date, stealth, company)
 
-  let y = 62
+  let y = 50
   doc.setFillColor(240, 240, 245)
   doc.roundedRect(12, y, 90, 16, 2, 2, 'F')
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
@@ -272,7 +272,7 @@ export async function exportSupplyOrderPDF(order, company = null) {
   const doc = new jsPDF()
   await addHeader(doc, 'SUPPLY ORDER', order.number || 'SO', order.date, false, company)
 
-  let y = 62
+  let y = 50
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
   doc.text('Supplier:', 14, y)
   doc.setFont('helvetica', 'normal')
@@ -319,7 +319,7 @@ export async function exportDayBookPDF(entries, dateRange, company = null) {
   const net = totalCredit - totalDebit
 
   autoTable(doc, {
-    startY: 62,
+    startY: 50,
     head: [['Date', 'Type', 'Description', 'Party', 'Reference', 'Wallet', 'Debit (Dr)', 'Credit (Cr)']],
     body: entries.map(e => [
       e.date || '',
@@ -360,7 +360,7 @@ export async function exportLedgerPDF(contact, entries, company = null) {
   const label = contact.accountHeadID ? `${contact.accountHeadID}` : 'ACC'
   await addHeader(doc, 'ACCOUNT STATEMENT', label, new Date().toLocaleDateString(), false, company)
 
-  let y = 62
+  let y = 50
   doc.setFillColor(240, 240, 245)
   doc.roundedRect(12, y, 186, 20, 2, 2, 'F')
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
@@ -417,7 +417,7 @@ export async function exportDeliveryNotePDF(note, company = null) {
   const doc = new jsPDF()
   await addHeader(doc, 'DELIVERY NOTE', note.number, note.date, false, company)
 
-  let y = 62
+  let y = 50
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
   doc.text('To:', 14, y)
   doc.setFont('helvetica', 'normal')
