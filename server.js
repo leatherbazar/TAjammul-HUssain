@@ -1518,7 +1518,7 @@ app.post('/api/companies/:id/next-number/:type', async (req, res) => {
     const num = company[field] || 1
     const updated = companies.map(c => c.id === req.params.id ? { ...c, [field]: num + 1 } : c)
     await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
-    const padded = String(num).padStart(2, '0')
+    const padded = String(num).padStart(3, '0')
     res.json({ number: `${prefix}-${padded}`, next: num + 1 })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

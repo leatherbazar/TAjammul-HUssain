@@ -198,7 +198,7 @@ export function AppProvider({ children }) {
       const json = await res.json()
       return json.number
     } catch {
-      const padded = String(Date.now()).slice(-2)
+      const padded = String(Date.now()).slice(-3)
       return `${PREFIX[type] || type.toUpperCase()}-${padded}`
     }
   }
