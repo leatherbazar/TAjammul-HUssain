@@ -1429,6 +1429,112 @@ app.put('/api/master-code', async (req, res) => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  BACKUP & RESTORE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Full database backup — exports everything as JSON
+app.get('/api/backup', async (req, res) => {
+  try {
+    const [contacts, ledgers, invoices, purchases, sales, stockMovements, users, auditLogs] = await Promise.all([
+      Contact.find().lean(),
+      Ledger.find().lean(),
+      Invoice.find().lean(),
+      Purchase.find().lean(),
+      Sale.find().lean(),
+      StockMovement.find().lean(),
+      User.find().lean(),
+      AuditLog.find().sort({ createdAt: -1 }).limit(1000).lean(),
+    ])
+
+    const otherData = {}
+    for (const name of OTHER_COLLECTIONS) {
+      otherData[name] = await models[name].find().lean()
+    }
+
+    const singletons = await Singleton.find().lean()
+
+    const backup = {
+      version: '2026.1',
+      exportedAt: new Date().toISOString(),
+      collections: {
+        contacts, ledgers, invoices, purchases, sales, stockMovements,
+        users: users.map(u => ({ ...u, password: '***' })), // mask passwords
+        auditLogs,
+        singletons,
+        ...otherData,
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename=tataheer-erp-backup-${new Date().toISOString().slice(0,10)}.json`)
+    res.json(backup)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Restore from backup JSON
+app.post('/api/restore', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const { collections, version } = req.body
+    if (!collections) return res.status(400).json({ error: 'Invalid backup file' })
+
+    const results = {}
+
+    // Restore OTHER_COLLECTIONS (quotations, inventory, etc.)
+    for (const name of OTHER_COLLECTIONS) {
+      if (collections[name]?.length) {
+        await models[name].deleteMany({})
+        const docs = collections[name].map(({ _id, __v, ...d }) => d)
+        await models[name].insertMany(docs, { ordered: false }).catch(() => {})
+        results[name] = docs.length
+      }
+    }
+
+    // Restore contacts
+    if (collections.contacts?.length) {
+      await Contact.deleteMany({})
+      const docs = collections.contacts.map(({ _id, __v, ...d }) => d)
+      await Contact.insertMany(docs, { ordered: false }).catch(() => {})
+      results.contacts = docs.length
+    }
+
+    // Restore invoices
+    if (collections.invoices?.length) {
+      await Invoice.deleteMany({})
+      const docs = collections.invoices.map(({ _id, __v, ...d }) => d)
+      await Invoice.insertMany(docs, { ordered: false }).catch(() => {})
+      results.invoices = docs.length
+    }
+
+    // Restore purchases
+    if (collections.purchases?.length) {
+      await Purchase.deleteMany({})
+      const docs = collections.purchases.map(({ _id, __v, ...d }) => d)
+      await Purchase.insertMany(docs, { ordered: false }).catch(() => {})
+      results.purchases = docs.length
+    }
+
+    // Restore sales
+    if (collections.sales?.length) {
+      await Sale.deleteMany({})
+      const docs = collections.sales.map(({ _id, __v, ...d }) => d)
+      await Sale.insertMany(docs, { ordered: false }).catch(() => {})
+      results.sales = docs.length
+    }
+
+    // Restore singletons (settings, wallets, etc.) — but NOT users/passwords
+    if (collections.singletons?.length) {
+      for (const s of collections.singletons) {
+        const { _id, __v, ...rest } = s
+        await Singleton.findOneAndUpdate({ key: rest.key }, { $set: rest }, { upsert: true })
+      }
+      results.singletons = collections.singletons.length
+    }
+
+    res.json({ ok: true, restored: results, message: 'Restore completed successfully!' })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  FILE ATTACHMENTS (Cloudinary)
 // ═══════════════════════════════════════════════════════════════════════════════
 
