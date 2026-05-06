@@ -4,6 +4,16 @@ import mongoose from 'mongoose'
 import cors from 'cors'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { v2 as cloudinary } from 'cloudinary'
+import multer from 'multer'
+
+// ─── CLOUDINARY CONFIG ────────────────────────────────────────────────────────
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }) // 10MB limit
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -1416,6 +1426,85 @@ app.put('/api/settings', async (req, res) => {
 app.put('/api/master-code', async (req, res) => {
   try { await Singleton.findOneAndUpdate({ key: 'masterCode' }, { value: req.body.masterCode }, { upsert: true }); res.json({ ok: true }) }
   catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FILE ATTACHMENTS (Cloudinary)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Upload file to Cloudinary
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' })
+
+    const { folder = 'tat-erp', refId = '', refType = '' } = req.body
+
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `tat-erp/${folder}`,
+          resource_type: 'auto', // handles PDF, images, docs etc
+          public_id: `${refType}_${refId}_${Date.now()}`,
+          use_filename: true,
+        },
+        (err, result) => err ? reject(err) : resolve(result)
+      )
+      stream.end(req.file.buffer)
+    })
+
+    // Save attachment record to DB
+    const attachment = await models['attachments'] ? null : null
+    const att = await mongoose.model('Attachment', new mongoose.Schema({
+      id: String, url: String, publicId: String, originalName: String,
+      fileType: String, size: Number, refId: String, refType: String,
+      uploadedBy: String, folder: String,
+    }, { strict: false, timestamps: true })).create({
+      id: Date.now().toString(),
+      url: result.secure_url,
+      publicId: result.public_id,
+      originalName: req.file.originalname,
+      fileType: req.file.mimetype,
+      size: req.file.size,
+      refId, refType, folder,
+      uploadedBy: req.body.uploadedBy || 'unknown',
+    }).catch(() => null)
+
+    res.json({
+      ok: true,
+      url: result.secure_url,
+      publicId: result.public_id,
+      originalName: req.file.originalname,
+      fileType: req.file.mimetype,
+      size: req.file.size,
+    })
+  } catch (err) {
+    console.error('Upload error:', err)
+    res.status(500).json({ error: err.message || 'Upload failed' })
+  }
+})
+
+// Get attachments for a specific record
+app.get('/api/attachments', async (req, res) => {
+  try {
+    const { refId, refType } = req.query
+    const Attachment = mongoose.models.Attachment || mongoose.model('Attachment', new mongoose.Schema({}, { strict: false, timestamps: true }))
+    const query = {}
+    if (refId) query.refId = refId
+    if (refType) query.refType = refType
+    const docs = await Attachment.find(query).sort({ createdAt: -1 }).lean()
+    res.json(docs.map(fmtLean))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Delete attachment
+app.delete('/api/attachments/:publicId', async (req, res) => {
+  try {
+    const publicId = decodeURIComponent(req.params.publicId)
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' })
+    const Attachment = mongoose.models.Attachment || mongoose.model('Attachment', new mongoose.Schema({}, { strict: false, timestamps: true }))
+    await Attachment.findOneAndDelete({ publicId })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════

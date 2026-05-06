@@ -13,6 +13,7 @@ import Finance from './components/modules/Finance'
 import CalendarModule from './components/modules/CalendarModule'
 import UserManagement from './components/modules/UserManagement'
 import Settings from './components/modules/Settings'
+import Attachments from './components/common/Attachments'
 import ClientPortal from './components/modules/ClientPortal'
 import Contacts from './components/modules/Contacts'
 import Ledger from './components/modules/Ledger'
@@ -315,7 +316,7 @@ function ClientRequestsAdmin() {
                   <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
                   <td><span className={`badge badge-${q.status}`}>{q.status === 'cancelled' ? 'Rejected' : q.status}</span></td>
                   <td>
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {q.source !== 'admin' && (
                         <>
                           <button
@@ -332,6 +333,10 @@ function ClientRequestsAdmin() {
                           >{statusLoading[q.id] ? '⏳' : '✕'} Reject</button>
                         </>
                       )}
+                    </div>
+                    {/* Attachments inline */}
+                    <div style={{ marginTop: 6 }}>
+                      <Attachments refId={q.id} refType="client-request" uploadedBy="admin" />
                     </div>
                   </td>
                 </tr>

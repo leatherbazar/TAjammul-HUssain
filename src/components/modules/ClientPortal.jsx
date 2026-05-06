@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import { exportQuotationPDF } from '../../utils/pdfExport'
 import { exportQuotationExcel } from '../../utils/excelExport'
+import Attachments from '../common/Attachments'
 import toast from 'react-hot-toast'
 
 // Translate internal status → client-facing label + style
@@ -262,12 +263,16 @@ export default function ClientPortal() {
                     <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
                     <td>{clientStatusBadge(q.status)}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊 Excel</button>
                         {q.status === 'cancelled' && (
                           <button className="btn btn-warning btn-xs" onClick={() => setTab('new-request')} title="Request was rejected — send a new one">🔁 New</button>
                         )}
+                      </div>
+                      {/* Client can upload supporting docs */}
+                      <div style={{ marginTop: 6 }}>
+                        <Attachments refId={q.id} refType="client-request" uploadedBy={currentUser?.name} />
                       </div>
                     </td>
                   </tr>
