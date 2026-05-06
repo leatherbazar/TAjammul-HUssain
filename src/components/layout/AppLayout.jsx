@@ -104,33 +104,30 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
 function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, onLogout }) {
   const [installPrompt, setInstallPrompt] = useState(null)
   const [isInstalled, setIsInstalled]     = useState(false)
+  const [showGuide, setShowGuide]         = useState(false)
 
   useEffect(() => {
-    // Capture the install prompt
-    const handler = (e) => {
-      e.preventDefault()
-      setInstallPrompt(e)
-    }
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
-
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true)
-    }
-    window.addEventListener('appinstalled', () => setIsInstalled(true))
-
+    if (window.matchMedia('(display-mode: standalone)').matches) setIsInstalled(true)
+    window.addEventListener('appinstalled', () => { setIsInstalled(true); setInstallPrompt(null) })
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
   const handleInstall = async () => {
-    if (!installPrompt) return
-    installPrompt.prompt()
-    const { outcome } = await installPrompt.userChoice
-    if (outcome === 'accepted') {
-      setInstallPrompt(null)
-      setIsInstalled(true)
+    if (installPrompt) {
+      // Chrome Android/Desktop — native prompt
+      installPrompt.prompt()
+      const { outcome } = await installPrompt.userChoice
+      if (outcome === 'accepted') { setInstallPrompt(null); setIsInstalled(true) }
+    } else {
+      // iOS Safari or already dismissed — show manual guide
+      setShowGuide(true)
     }
   }
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 
   return (
     <>
@@ -176,8 +173,44 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
 
         {/* ── Bottom: Install + User ─────────────────────────────── */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 8 }}>
-          {/* Install App Button */}
-          {!isInstalled && installPrompt && (
+
+          {/* Install Guide Modal */}
+          {showGuide && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div className="glass" style={{ padding: 24, maxWidth: 340, width: '100%', borderRadius: 16 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 16, textAlign: 'center' }}>📲 Install TAT ERP</div>
+                {isIOS ? (
+                  <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-muted)' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>iOS (Safari):</div>
+                    <div>1. Tap <strong>Share</strong> button (□↑) at bottom</div>
+                    <div>2. Scroll down → tap <strong>"Add to Home Screen"</strong></div>
+                    <div>3. Tap <strong>"Add"</strong> — done! ✅</div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-muted)' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Chrome (Desktop/Android):</div>
+                    <div>1. Look for <strong>install icon (⊕)</strong> in address bar</div>
+                    <div>2. Or tap <strong>3 dots menu (⋮)</strong></div>
+                    <div>3. Tap <strong>"Install App"</strong> or <strong>"Add to Home Screen"</strong></div>
+                    <div style={{ marginTop: 10, padding: '8px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', fontSize: 12 }}>
+                      💡 Make sure you're on <strong>tat-bbc9.onrender.com</strong> (HTTPS)
+                    </div>
+                  </div>
+                )}
+                <button onClick={() => setShowGuide(false)}
+                  style={{ marginTop: 16, width: '100%', padding: '10px', borderRadius: 10, background: 'var(--red)', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Install App Button — always visible unless installed */}
+          {isInstalled ? (
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#22c55e', marginBottom: 8, padding: '6px 0' }}>
+              ✅ App Installed
+            </div>
+          ) : (
             <button
               onClick={handleInstall}
               style={{
@@ -194,11 +227,6 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
             >
               <span style={{ fontSize: 16 }}>📲</span> Install App
             </button>
-          )}
-          {isInstalled && (
-            <div style={{ textAlign: 'center', fontSize: 11, color: '#22c55e', marginBottom: 8, padding: '6px 0' }}>
-              ✅ App Installed
-            </div>
           )}
 
           {/* User Info + Logout */}
