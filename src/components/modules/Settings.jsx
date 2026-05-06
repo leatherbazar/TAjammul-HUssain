@@ -76,7 +76,7 @@ function BackupRestore() {
     <div className="section-box">
       <div className="section-title">💾 Backup & Restore</div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Export all your data as a JSON file and restore it anytime. Recommended: backup weekly.
+        Export <strong>everything</strong> — invoices, contacts, inventory, users, passwords, settings. Restore anytime. Keep this file safe!
       </p>
 
       {/* Last Backup Info */}

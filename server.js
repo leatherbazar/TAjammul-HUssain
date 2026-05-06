@@ -1458,7 +1458,7 @@ app.get('/api/backup', async (req, res) => {
       exportedAt: new Date().toISOString(),
       collections: {
         contacts, ledgers, invoices, purchases, sales, stockMovements,
-        users: users.map(u => ({ ...u, password: '***' })), // mask passwords
+        users, // full user data including passwords for complete restore
         auditLogs,
         singletons,
         ...otherData,
@@ -1521,7 +1521,15 @@ app.post('/api/restore', express.json({ limit: '50mb' }), async (req, res) => {
       results.sales = docs.length
     }
 
-    // Restore singletons (settings, wallets, etc.) — but NOT users/passwords
+    // Restore users (including passwords)
+    if (collections.users?.length) {
+      await User.deleteMany({})
+      const docs = collections.users.map(({ _id, __v, ...d }) => d)
+      await User.insertMany(docs, { ordered: false }).catch(() => {})
+      results.users = docs.length
+    }
+
+    // Restore singletons (settings, wallets, etc.)
     if (collections.singletons?.length) {
       for (const s of collections.singletons) {
         const { _id, __v, ...rest } = s
