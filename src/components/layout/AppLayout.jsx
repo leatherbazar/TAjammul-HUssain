@@ -102,9 +102,12 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
 }
 
 function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, onLogout }) {
+  const { currentCompany, currentCompanyId, switchCompany, data } = useApp()
+  const companies = data?.companies || []
   const [installPrompt, setInstallPrompt] = useState(null)
   const [isInstalled, setIsInstalled]     = useState(false)
   const [showGuide, setShowGuide]         = useState(false)
+  const [showCompanySwitcher, setShowCompanySwitcher] = useState(false)
 
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setInstallPrompt(e) }
@@ -171,8 +174,66 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
           })}
         </div>
 
-        {/* ── Bottom: Install + User ─────────────────────────────── */}
+        {/* ── Bottom: Company Switcher + Install + User ───────────── */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 8 }}>
+
+          {/* Company Switcher — admin only, or if multiple companies exist */}
+          {companies.length > 1 && (
+            <div style={{ marginBottom: 8, position: 'relative' }}>
+              <button
+                onClick={() => setShowCompanySwitcher(p => !p)}
+                style={{
+                  width: '100%', padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10, color: '#fff',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>🏢</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                    {currentCompany?.name || 'Select Company'}
+                  </span>
+                </span>
+                <span style={{ fontSize: 10, opacity: 0.6 }}>{showCompanySwitcher ? '▲' : '▼'}</span>
+              </button>
+
+              {showCompanySwitcher && (
+                <div style={{
+                  position: 'absolute', bottom: '110%', left: 0, right: 0,
+                  background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 10, overflow: 'hidden', zIndex: 100,
+                  boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
+                }}>
+                  <div style={{ padding: '8px 12px', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                    Switch Company
+                  </div>
+                  {companies.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => { switchCompany(c.id); setShowCompanySwitcher(false); onClose() }}
+                      style={{
+                        width: '100%', padding: '10px 14px', textAlign: 'left',
+                        background: c.id === currentCompanyId ? 'rgba(209,24,24,0.15)' : 'transparent',
+                        border: 'none', color: c.id === currentCompanyId ? '#D11818' : '#e0e0e0',
+                        fontSize: 13, fontWeight: c.id === currentCompanyId ? 700 : 400,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                        borderBottom: '1px solid rgba(255,255,255,0.05)'
+                      }}
+                    >
+                      <span>{c.id === currentCompanyId ? '✅' : '🏢'}</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{c.name}</div>
+                        <div style={{ fontSize: 10, opacity: 0.5 }}>{c.id}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Install Guide Modal */}
           {showGuide && (

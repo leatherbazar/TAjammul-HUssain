@@ -23,7 +23,8 @@ const INITIAL_DATA = {
   contacts: [],
   wallets: { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
   settings: { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' },
-  securitySettings: { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' }
+  securitySettings: { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' },
+  companies: []
 }
 
 // ─── API HELPER ───────────────────────────────────────────────────────────────
@@ -64,19 +65,24 @@ export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('tat_user')) } catch (_) { return null }
   })
+  const [currentCompanyId, setCurrentCompanyId] = useState(() => {
+    return sessionStorage.getItem('tat_company') || 'TAT'
+  })
+
+  // Load data for the active company
+  const loadData = async (companyId) => {
+    try {
+      const res = await fetch(`/api/data?company=${companyId || 'TAT'}`)
+      const serverData = await res.json()
+      setData(prev => ({ ...prev, ...serverData }))
+    } catch (err) {
+      console.error('Failed to load data from server:', err)
+    }
+  }
 
   // Load all data from server on mount
   useEffect(() => {
-    fetch('/api/data')
-      .then(r => r.json())
-      .then(serverData => {
-        setData(prev => ({ ...prev, ...serverData }))
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Failed to load data from server:', err)
-        setLoading(false)
-      })
+    loadData(currentCompanyId).finally(() => setLoading(false))
   }, [])
 
   // Persist session
@@ -85,9 +91,20 @@ export function AppProvider({ children }) {
     else sessionStorage.removeItem('tat_user')
   }, [currentUser])
 
+  // Switch company — reloads all transactional data for the new company
+  const switchCompany = async (companyId) => {
+    setLoading(true)
+    setCurrentCompanyId(companyId)
+    sessionStorage.setItem('tat_company', companyId)
+    await loadData(companyId)
+    setLoading(false)
+  }
+
+  // Current company object
+  const currentCompany = (data.companies || []).find(c => c.id === currentCompanyId) || { id: 'TAT', name: 'Tataheer Traders' }
+
   // ─── DATA OPERATIONS ────────────────────────────────────────────────────────
 
-  // update a top-level key (wallets, settings, masterCode)
   const update = (key, value) => {
     setData(prev => {
       if (key === 'masterCode') api('PUT', '/api/master-code', { masterCode: value })
@@ -97,11 +114,9 @@ export function AppProvider({ children }) {
     })
   }
 
-  // update a nested key
   const updateNested = (key, subKey, value) => {
     setData(prev => {
       const newNested = { ...prev[key], [subKey]: value }
-
       if (key === 'settings') {
         api('PUT', '/api/settings', newNested)
       } else if (key === 'users') {
@@ -113,20 +128,24 @@ export function AppProvider({ children }) {
           api('PUT', '/api/users/admin', value)
         }
       }
-
       return { ...prev, [key]: newNested }
     })
   }
 
-  // add a record to a collection
+  // add a record — automatically stamps companyId
   const addRecord = (collection, record) => {
-    const newRecord = { ...record, id: Date.now().toString(), createdAt: new Date().toISOString() }
+    const SHARED = ['inventory', 'calendarEvents', 'contacts']
+    const newRecord = {
+      ...record,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      ...(SHARED.includes(collection) ? {} : { companyId: currentCompanyId })
+    }
     setData(prev => ({ ...prev, [collection]: [newRecord, ...prev[collection]] }))
     api('POST', `/api/${collection}`, newRecord)
     return newRecord
   }
 
-  // update a record in a collection
   const updateRecord = (collection, id, updates) => {
     const withTimestamp = { ...updates, updatedAt: new Date().toISOString() }
     setData(prev => ({
@@ -136,16 +155,15 @@ export function AppProvider({ children }) {
     api('PUT', `/api/${collection}/${id}`, withTimestamp)
   }
 
-  // delete a record from a collection
   const deleteRecord = (collection, id) => {
     setData(prev => ({ ...prev, [collection]: prev[collection].filter(r => r.id !== id) }))
     api('DELETE', `/api/${collection}/${id}`)
   }
 
-  // Refresh all data from server (called after operations that bypass AppContext)
+  // Refresh all data from server
   const refreshData = async () => {
     try {
-      const res = await fetch('/api/data')
+      const res = await fetch(`/api/data?company=${currentCompanyId}`)
       const serverData = await res.json()
       setData(prev => ({ ...prev, ...serverData }))
     } catch (err) {
@@ -155,10 +173,20 @@ export function AppProvider({ children }) {
 
   const verifyMasterCode = (code) => code === data.masterCode
 
-  const nextInvoiceNumber = () => {
-    const num = data.settings.invoiceCounter
-    updateNested('settings', 'invoiceCounter', num + 1)
-    return `INV-${num}`
+  // Per-company invoice number (calls server to atomically increment)
+  const nextInvoiceNumber = async () => {
+    try {
+      const res = await api('POST', `/api/companies/${currentCompanyId}/next-invoice`)
+      const json = await res.json()
+      // Update local counter too
+      setData(prev => ({ ...prev, settings: { ...prev.settings, invoiceCounter: json.next } }))
+      return json.number
+    } catch (err) {
+      // Fallback to local counter
+      const num = data.settings.invoiceCounter
+      updateNested('settings', 'invoiceCounter', num + 1)
+      return `INV-${num}`
+    }
   }
 
   // ─── LOADING SCREEN ─────────────────────────────────────────────────────────
@@ -169,7 +197,6 @@ export function AppProvider({ children }) {
         justifyContent: 'center', height: '100vh',
         background: '#0a0a0f', color: '#e0e0e0', gap: 16
       }}>
-        {/* Logos */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <img
             src="/logo-tat.png"
@@ -182,12 +209,9 @@ export function AppProvider({ children }) {
             style={{ height: 34, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.6)) brightness(1.15)' }}
           />
         </div>
-
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, textTransform: 'uppercase' }}>
           Loading Tataheer ERP...
         </div>
-
-        {/* Spinner */}
         <div style={{
           width: 36, height: 36,
           border: '3px solid rgba(209,24,24,0.15)',
@@ -195,7 +219,6 @@ export function AppProvider({ children }) {
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite'
         }} />
-
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
           @keyframes pulse {
@@ -210,7 +233,8 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       data, update, updateNested, addRecord, updateRecord, deleteRecord,
-      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber, refreshData
+      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber, refreshData,
+      currentCompanyId, currentCompany, switchCompany
     }}>
       {children}
     </AppContext.Provider>
