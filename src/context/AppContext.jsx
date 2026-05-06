@@ -167,19 +167,42 @@ export function AppProvider({ children }) {
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', height: '100vh',
-        background: 'var(--bg, #0a0a0f)', color: 'var(--text, #e0e0e0)', gap: 18
+        background: '#0a0a0f', color: '#e0e0e0', gap: 16
       }}>
-        <div style={{ fontSize: 36 }}>⚙️</div>
-        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 1, textAlign: 'center' }}>
-          Welcome to TATAHEER BUSINESS GROUP
+        {/* Logos */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <img
+            src="/logo-tat.png"
+            alt="TAT Logo"
+            style={{ height: 90, objectFit: 'contain', filter: 'drop-shadow(0 0 24px rgba(209,24,24,0.5))', animation: 'pulse 2s ease-in-out infinite' }}
+          />
+          <img
+            src="/tataheer-logo.png"
+            alt="Tataheer Traders"
+            style={{ height: 34, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.6)) brightness(1.15)' }}
+          />
         </div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: -10 }}>Loading Tataheer ERP...</div>
+
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, textTransform: 'uppercase' }}>
+          Loading Tataheer ERP...
+        </div>
+
+        {/* Spinner */}
         <div style={{
-          width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)',
-          borderTop: '3px solid #4f8ef7', borderRadius: '50%',
+          width: 36, height: 36,
+          border: '3px solid rgba(209,24,24,0.15)',
+          borderTop: '3px solid #D11818',
+          borderRadius: '50%',
           animation: 'spin 0.8s linear infinite'
         }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px rgba(209,24,24,0.4)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 32px rgba(209,24,24,0.7)); }
+          }
+        `}</style>
       </div>
     )
   }
