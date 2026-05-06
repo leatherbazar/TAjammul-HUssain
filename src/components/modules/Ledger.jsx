@@ -310,7 +310,7 @@ function ReceiveAdvanceModal({ contact, onClose, onSuccess }) {
 
 // ─── Main Ledger Component ────────────────────────────────────────────────────
 export default function Ledger() {
-  const { data, refreshData } = useApp()
+  const { data, refreshData, currentCompany } = useApp()
   const [contacts, setContacts]         = useState([])
   const [selected, setSelected]         = useState(null)
   const [loading, setLoading]           = useState(false)
@@ -434,7 +434,7 @@ export default function Ledger() {
               🔢 Edit Account ID
             </button>
             <button className="btn btn-secondary btn-sm"
-              onClick={() => exportLedgerPDF(contact, entries)}
+              onClick={() => exportLedgerPDF(contact, entries, currentCompany)}
               style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
               🖨️ Print PDF
             </button>

@@ -202,7 +202,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
 }
 
 export default function DeliveryNotes() {
-  const { data, addRecord, updateRecord, deleteRecord } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentCompany, nextDocNumber } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
@@ -214,21 +214,12 @@ export default function DeliveryNotes() {
     return list.filter(n => n.clientName?.toLowerCase().includes(search.toLowerCase()) || n.number?.includes(search))
   }, [data.deliveryNotes, search])
 
-  const handleSave = (f) => {
+  const handleSave = async (f) => {
     if (selected) {
       updateRecord('deliveryNotes', selected.id, f)
       toast.success('Updated!')
     } else {
-      let num
-      if (f.invoiceRef) {
-        // Smart numbering: DN-201/1, DN-201/2 ... per invoice
-        const existing = (data.deliveryNotes || []).filter(n => n.invoiceRef === f.invoiceRef)
-        const part = existing.length + 1
-        const invSuffix = f.invoiceRef.replace(/^[A-Za-z]+-/, '') // "INV-201" → "201"
-        num = `DN-${invSuffix}/${part}`
-      } else {
-        num = `DN-${Date.now().toString().slice(-5)}`
-      }
+      const num = await nextDocNumber('dn')
       addRecord('deliveryNotes', { ...f, number: num })
       toast.success(`Delivery Note ${num} created!`)
     }
@@ -275,7 +266,7 @@ export default function DeliveryNotes() {
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => setMasterAction({ type: 'edit', item: n })}>✏️</button>
                     <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: n.id })}>🗑️</button>
-                    <button className="btn btn-secondary btn-xs" onClick={() => exportDeliveryNotePDF(n)}>📄</button>
+                    <button className="btn btn-secondary btn-xs" onClick={() => exportDeliveryNotePDF(n, currentCompany)}>📄</button>
                   </div>
                 </td>
               </tr>

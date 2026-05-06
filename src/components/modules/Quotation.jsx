@@ -194,7 +194,7 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
 }
 
 export default function Quotations() {
-  const { data, addRecord, updateRecord, deleteRecord, nextInvoiceNumber } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, nextInvoiceNumber, nextDocNumber, currentCompany } = useApp()
   const navigate = useNavigate()
   const [view, setView] = useState('list') // list | new | edit | detail
   const [selected, setSelected] = useState(null)
@@ -217,14 +217,14 @@ export default function Quotations() {
     return list
   }, [data.quotations, search, statusFilter, clientFilter])
 
-  const handleSave = (formData, goToInvoice = false) => {
+  const handleSave = async (formData, goToInvoice = false) => {
     let savedRecord
     if (selected) {
       updateRecord('quotations', selected.id, formData)
       savedRecord = { ...selected, ...formData }
       toast.success('Quotation updated!')
     } else {
-      const num = `QT-${Date.now().toString().slice(-5)}`
+      const num = await nextDocNumber('quotation')
       savedRecord = { ...formData, number: num, id: Date.now().toString() }
       addRecord('quotations', savedRecord)
       toast.success('Quotation created!')
@@ -329,7 +329,7 @@ export default function Quotations() {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => requestEdit(q)}>✏️</button>
                     <button className="btn btn-danger btn-xs" onClick={() => requestDelete(q.id)}>🗑️</button>
-                    <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, q.stealthPrint)}>📄</button>
+                    <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, q.stealthPrint, currentCompany)}>📄</button>
                     <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊</button>
                     {existingInv ? (
                       // Invoice already exists — show the linked invoice number, no duplicate allowed

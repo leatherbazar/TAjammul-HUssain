@@ -256,7 +256,7 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
 }
 
 export default function SupplyOrders({ isEmployee = false }) {
-  const { data, addRecord, updateRecord, deleteRecord, currentUser, refreshData } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentUser, refreshData, currentCompany, nextDocNumber } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
@@ -270,10 +270,10 @@ export default function SupplyOrders({ isEmployee = false }) {
     return list
   }, [data.supplyOrders, search, isEmployee, currentUser])
 
-  const handleSave = (f) => {
+  const handleSave = async (f) => {
     if (selected) { updateRecord('supplyOrders', selected.id, f); toast.success('Order updated!') }
     else {
-      const num = `SO-${Date.now().toString().slice(-5)}`
+      const num = await nextDocNumber('so')
       addRecord('supplyOrders', { ...f, number: num })
       toast.success('Supply order created!')
     }
@@ -340,7 +340,7 @@ export default function SupplyOrders({ isEmployee = false }) {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => { if (isEmployee) { setSelected(o); setView('edit') } else { setMasterAction({ type: 'edit', item: o }) } }}>✏️</button>
                     {!isEmployee && <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: o.id })}>🗑️</button>}
-                    <button className="btn btn-secondary btn-xs" onClick={() => exportSupplyOrderPDF(o)} title="Export PDF">📄</button>
+                    <button className="btn btn-secondary btn-xs" onClick={() => exportSupplyOrderPDF(o, currentCompany)} title="Export PDF">📄</button>
                     {!isEmployee && !o.purchaseRef && o.status !== 'cancelled' && (
                       <button
                         className="btn btn-xs"

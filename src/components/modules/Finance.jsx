@@ -166,7 +166,7 @@ function EditEntryModal({ entry, onClose, onSave }) {
 }
 
 function DayBook() {
-  const { data, refreshData } = useApp()
+  const { data, refreshData, currentCompany } = useApp()
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     type: 'income', description: '', debit: '', credit: '',
@@ -255,7 +255,7 @@ function DayBook() {
       <div className="section-title" style={{ justifyContent: 'space-between' }}>
         <span>📒 Day Book</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookPDF(entries)}>🖨️ PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookPDF(entries, null, currentCompany)}>🖨️ PDF</button>
           <button className="btn btn-secondary btn-sm" onClick={() => exportDayBookExcel(data.dayBook || [])}>📊 Excel</button>
         </div>
       </div>

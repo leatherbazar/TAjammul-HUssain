@@ -55,6 +55,8 @@ function Marquee() {
 }
 
 function Navbar({ user, onLogout, onToggleSidebar }) {
+  const { currentCompany } = useApp()
+  const isInf = currentCompany?.id === 'INF'
   return (
     <div className="navbar no-print">
       {/* Hamburger button — always visible, toggles sidebar */}
@@ -69,18 +71,28 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
       </button>
 
       <div className="navbar-logo">
-        <img
-          src="/logo-tat.png"
-          alt="TAT"
-          className="logo-img"
-          style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
-        />
-        <img
-          src="/tataheer-logo.png"
-          alt="Tataheer Traders"
-          style={{ height: 28, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) brightness(1.15)' }}
-          className="navbar-brand-text"
-        />
+        {isInf ? (
+          <img
+            src="/logo-inf.png"
+            alt="Infinity Corp"
+            style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
+          />
+        ) : (
+          <>
+            <img
+              src="/logo-tat.png"
+              alt="TAT"
+              className="logo-img"
+              style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
+            />
+            <img
+              src="/tataheer-dashboard-logo.png"
+              alt="Tataheer Traders"
+              style={{ height: 28, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) brightness(1.15)' }}
+              className="navbar-brand-text"
+            />
+          </>
+        )}
       </div>
 
       <div className="navbar-spacer" />

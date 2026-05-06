@@ -57,7 +57,7 @@ function ClientDashboard({ user }) {
                     <td>{clientStatusBadge(q.status)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>
+                        <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true, currentCompany)}>📄 PDF</button>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊 Excel</button>
                       </div>
                     </td>
@@ -178,7 +178,7 @@ function NewRequestForm({ user, onSave, onCancel }) {
 }
 
 export default function ClientPortal() {
-  const { currentUser, addRecord, data, refreshData } = useApp()
+  const { currentUser, addRecord, data, refreshData, currentCompany } = useApp()
   const [tab, setTab] = useState('dashboard')
   const [refreshing, setRefreshing] = useState(false)
 
@@ -264,7 +264,7 @@ export default function ClientPortal() {
                     <td>{clientStatusBadge(q.status)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true)}>📄 PDF</button>
+                        <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, true, currentCompany)}>📄 PDF</button>
                         <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊 Excel</button>
                         {q.status === 'cancelled' && (
                           <button className="btn btn-warning btn-xs" onClick={() => setTab('new-request')} title="Request was rejected — send a new one">🔁 New</button>

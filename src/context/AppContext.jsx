@@ -189,6 +189,20 @@ export function AppProvider({ children }) {
     }
   }
 
+  // Per-company sequential number for quotations / delivery notes / supply orders
+  const nextDocNumber = async (type) => {
+    // type: 'quotation' | 'dn' | 'so'
+    const PREFIX = { quotation: 'QT', dn: 'DN', so: 'SO' }
+    try {
+      const res = await api('POST', `/api/companies/${currentCompanyId}/next-number/${type}`)
+      const json = await res.json()
+      return json.number
+    } catch {
+      const padded = String(Date.now()).slice(-2)
+      return `${PREFIX[type] || type.toUpperCase()}-${padded}`
+    }
+  }
+
   // ─── LOADING SCREEN ─────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -204,8 +218,8 @@ export function AppProvider({ children }) {
             style={{ height: 90, objectFit: 'contain', filter: 'drop-shadow(0 0 24px rgba(209,24,24,0.5))', animation: 'pulse 2s ease-in-out infinite' }}
           />
           <img
-            src="/tataheer-logo.png"
-            alt="Tataheer Traders"
+            src="/logo-tbg.png"
+            alt="Tataheer Business Group"
             style={{ height: 34, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.6)) brightness(1.15)' }}
           />
         </div>
@@ -233,7 +247,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       data, update, updateNested, addRecord, updateRecord, deleteRecord,
-      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber, refreshData,
+      currentUser, setCurrentUser, verifyMasterCode, nextInvoiceNumber, nextDocNumber, refreshData,
       currentCompanyId, currentCompany, switchCompany
     }}>
       {children}

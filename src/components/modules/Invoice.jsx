@@ -358,7 +358,7 @@ function GenerateDNModal({ invoice, existingDNs, onGenerate, onCancel }) {
 
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
 function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
-  const { data, nextInvoiceNumber } = useApp()
+  const { data, nextInvoiceNumber, currentCompany } = useApp()
   const [form, setForm] = useState(() => {
     if (fromQuotation) {
       return {
@@ -677,7 +677,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
           <button className="btn btn-secondary" onClick={() => {
             const num = form.number || `INV-${Date.now().toString().slice(-3)}`
-            exportInvoicePDF({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax }, form.stealthPrint)
+            exportInvoicePDF({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax }, form.stealthPrint, currentCompany)
           }}>🖨️ Preview PDF</button>
           <button className="btn btn-primary" onClick={handleSave}>💾 Save Invoice</button>
         </div>
@@ -688,7 +688,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
 // ─── Main Invoice List ────────────────────────────────────────────────────────
 export default function Invoices() {
-  const { data, addRecord, updateRecord, deleteRecord } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentCompany } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [fromQuotation, setFromQuotation] = useState(null)
@@ -907,7 +907,7 @@ export default function Invoices() {
                       <button className="btn btn-danger btn-xs" title="Delete"
                         onClick={() => setMasterAction({ type: 'delete', id: inv.id })}>🗑️</button>
                       <button className="btn btn-secondary btn-xs" title="Print PDF"
-                        onClick={() => exportInvoicePDF(inv, inv.stealthPrint)}>📄</button>
+                        onClick={() => exportInvoicePDF(inv, inv.stealthPrint, currentCompany)}>📄</button>
                       <button className="btn btn-secondary btn-xs" title="Generate Delivery Note"
                         onClick={() => setDnModal(inv)}
                         style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>

@@ -278,7 +278,7 @@ mongoose.connection.once('open', async () => {
     // ── Companies (multi-company support) ─────────────────────────────────────
     await Singleton.findOneAndUpdate({ key: 'companies' }, { $setOnInsert: { value: [
       { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '426- Ali Arcade, 13-km Main Multan Road, Lahore', phone: '+92(314)4094900', email: 'tataheertraders@gmail.com', active: true },
-      { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '', phone: '', email: '', active: true },
+      { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '101- Choudery Plaza Royal Park Lahore', phone: '', email: '', active: true },
     ]}}, { upsert: true })
     await User.findOneAndUpdate(
       { role: 'admin' },
@@ -1489,6 +1489,27 @@ app.post('/api/companies/:id/next-invoice', async (req, res) => {
     const updated = companies.map(c => c.id === req.params.id ? { ...c, invoiceCounter: num + 1 } : c)
     await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
     res.json({ number: `INV-${num}`, next: num + 1 })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Atomically get next sequential number for a doc type (quotation, dn, so) per company
+// Counter field: quotationCounter, dnCounter, soCounter  — starts at 1 if missing
+app.post('/api/companies/:id/next-number/:type', async (req, res) => {
+  try {
+    const TYPE_MAP = { quotation: 'quotationCounter', dn: 'dnCounter', so: 'soCounter' }
+    const PREFIX_MAP = { quotation: 'QT', dn: 'DN', so: 'SO' }
+    const field  = TYPE_MAP[req.params.type]
+    const prefix = PREFIX_MAP[req.params.type]
+    if (!field) return res.status(400).json({ error: 'Unknown type' })
+    const doc = await Singleton.findOne({ key: 'companies' }).lean()
+    const companies = doc?.value || []
+    const company = companies.find(c => c.id === req.params.id)
+    if (!company) return res.status(404).json({ error: 'Company not found' })
+    const num = company[field] || 1
+    const updated = companies.map(c => c.id === req.params.id ? { ...c, [field]: num + 1 } : c)
+    await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
+    const padded = String(num).padStart(2, '0')
+    res.json({ number: `${prefix}-${padded}`, next: num + 1 })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
