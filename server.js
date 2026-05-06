@@ -278,8 +278,18 @@ mongoose.connection.once('open', async () => {
     // ── Companies (multi-company support) ─────────────────────────────────────
     await Singleton.findOneAndUpdate({ key: 'companies' }, { $setOnInsert: { value: [
       { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '426- Ali Arcade, 13-km Main Multan Road, Lahore', phone: '+92(314)4094900', email: 'tataheertraders@gmail.com', active: true },
-      { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '101- Choudery Plaza Royal Park Lahore', phone: '', email: '', active: true },
+      { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '101- Choudery Plaza Royal Park Lahore', phone: '+92-314-855-5566', email: 'infinity.crop512@gmail.com', active: true },
     ]}}, { upsert: true })
+    // Force-update INF contact details (in case DB was already seeded with blank phone/email)
+    {
+      const doc = await Singleton.findOne({ key: 'companies' }).lean()
+      if (doc) {
+        const updated = (doc.value || []).map(c => c.id === 'INF'
+          ? { ...c, address: '101- Choudery Plaza Royal Park Lahore', phone: '+92-314-855-5566', email: 'infinity.crop512@gmail.com' }
+          : c)
+        await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
+      }
+    }
     await User.findOneAndUpdate(
       { role: 'admin' },
       { $set: { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', name: 'Administrator', role: 'admin' }, $setOnInsert: { id: 'admin' } },

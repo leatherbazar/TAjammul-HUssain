@@ -87,51 +87,60 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
 
           return (
             <div key={item.id} style={{ marginBottom: 16, padding: 14, borderRadius: 10, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
-              <div className="form-grid" style={{ marginBottom: item.useMatrix ? 12 : 0 }}>
-                <div className="input-group" style={{ gridColumn: 'span 3' }}>
-                  <label className="input-label">Description #{idx + 1}</label>
-                  <input className="input" placeholder="Item description..." value={item.description}
-                    onChange={e => updateItem(item.id, 'description', e.target.value)} spellCheck />
-                </div>
+              {/* Row 1: Description (full width) */}
+              <div className="input-group" style={{ marginBottom: 10 }}>
+                <label className="input-label">Description #{idx + 1}</label>
+                <input className="input" placeholder="Item description..." value={item.description}
+                  onChange={e => updateItem(item.id, 'description', e.target.value)} spellCheck />
+              </div>
+
+              {/* Row 2: Color full width on mobile */}
+              <div className="input-group" style={{ marginBottom: 10 }}>
+                <label className="input-label">Color (if single)</label>
+                <input className="input" placeholder="e.g. Black" value={item.color}
+                  onChange={e => updateItem(item.id, 'color', e.target.value)} disabled={item.useMatrix} />
+              </div>
+
+              {/* Row 3: Qty + Unit Price — large side-by-side */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <div className="input-group">
-                  <label className="input-label">Color (if single)</label>
-                  <input className="input" placeholder="e.g. Black" value={item.color}
-                    onChange={e => updateItem(item.id, 'color', e.target.value)} disabled={item.useMatrix} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Qty {item.useMatrix ? '(auto)' : '✏️ e.g. 10+5'}</label>
-                  <input type="text" inputMode="decimal" className="input" placeholder="0"
+                  <label className="input-label" style={{ fontSize: 13, fontWeight: 700 }}>Qty {item.useMatrix ? '(auto)' : '✏️'}</label>
+                  <input type="text" inputMode="decimal" className="input"
+                    placeholder="0" style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', padding: '10px 8px' }}
                     value={item.useMatrix ? qty : item.qty}
                     onChange={e => updateItem(item.id, 'qty', e.target.value)}
                     onBlur={e => updateItem(item.id, 'qty', calcExpr(e.target.value))}
                     disabled={item.useMatrix} />
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Unit Price (PKR) ✏️ e.g. 100-25</label>
-                  <input type="text" inputMode="decimal" className="input" placeholder="0.00"
+                  <label className="input-label" style={{ fontSize: 13, fontWeight: 700 }}>Unit Price (PKR) ✏️</label>
+                  <input type="text" inputMode="decimal" className="input"
+                    placeholder="0.00" style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', padding: '10px 8px' }}
                     value={item.unitPrice}
                     onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
                     onBlur={e => updateItem(item.id, 'unitPrice', calcExpr(e.target.value))} />
                 </div>
-                <div className="input-group" style={{ justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
-                      onClick={() => {
-                        updateItem(item.id, 'useMatrix', !item.useMatrix)
-                        setExpandedRows(prev => ({ ...prev, [item.id]: !item.useMatrix }))
-                      }}
-                      title="Toggle size/color breakdown"
-                    >
-                      🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}
-                    </button>
-                    {form.items.length > 1 && (
-                      <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
-                    )}
-                  </div>
-                  <div style={{ marginTop: 6, textAlign: 'right', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
-                    PKR {amount.toLocaleString()}
-                  </div>
+              </div>
+
+              {/* Row 4: Amount + buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--green)' }}>
+                  PKR {amount.toLocaleString()}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
+                    onClick={() => {
+                      updateItem(item.id, 'useMatrix', !item.useMatrix)
+                      setExpandedRows(prev => ({ ...prev, [item.id]: !item.useMatrix }))
+                    }}
+                    title="Toggle size/color breakdown"
+                  >
+                    🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}
+                  </button>
+                  {form.items.length > 1 && (
+                    <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
+                  )}
                 </div>
               </div>
 

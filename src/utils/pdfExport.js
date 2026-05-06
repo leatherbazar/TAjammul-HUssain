@@ -16,8 +16,8 @@ const COMPANY_PROFILES = {
     name: 'INFINITY CORP',
     tagline: 'Infinity Corp',
     address: '101- Choudery Plaza Royal Park Lahore',
-    phone: '',
-    email: '',
+    phone: '+92-314-855-5566',
+    email: 'infinity.crop512@gmail.com',
   },
 }
 
