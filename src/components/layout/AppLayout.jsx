@@ -6,16 +6,26 @@ import toast from 'react-hot-toast'
 // ── Background colour helper ─────────────────────────────────────────────────
 const BG_KEY = 'tat_bg_color'
 const BG_PRESETS = [
-  { label: 'Midnight',  color: '#06060f' },
-  { label: 'Deep Navy', color: '#060d1f' },
-  { label: 'Dark Teal', color: '#020f0f' },
-  { label: 'Forest',    color: '#030d06' },
-  { label: 'Maroon',    color: '#0f0306' },
-  { label: 'Charcoal',  color: '#111111' },
-  { label: 'Slate',     color: '#0d1117' },
-  { label: 'Warm Dark', color: '#120d08' },
-  { label: 'Purple',    color: '#0a0614' },
-  { label: 'Steel',     color: '#080c12' },
+  { label: 'Midnight',   color: '#06060f' },
+  { label: 'Deep Navy',  color: '#060d1f' },
+  { label: 'Dark Teal',  color: '#020f0f' },
+  { label: 'Forest',     color: '#030d06' },
+  { label: 'Maroon',     color: '#0f0306' },
+  { label: 'Charcoal',   color: '#111111' },
+  { label: 'Slate',      color: '#0d1117' },
+  { label: 'Warm Dark',  color: '#120d08' },
+  { label: 'Purple',     color: '#0a0614' },
+  { label: 'Steel',      color: '#080c12' },
+  { label: 'Navy Blue',  color: '#0a1628' },
+  { label: 'Dark Green', color: '#0a1a0a' },
+  { label: 'Espresso',   color: '#1a0e08' },
+  { label: 'Wine',       color: '#1a0510' },
+  { label: 'Ocean',      color: '#041520' },
+  { label: 'Dark Gray',  color: '#1c1c1c' },
+  { label: 'Indigo',     color: '#0f0a20' },
+  { label: 'Olive',      color: '#0f1205' },
+  { label: 'Ruby',       color: '#1a0508' },
+  { label: 'Smoke',      color: '#151515' },
 ]
 function applyBg(hex) {
   document.documentElement.style.setProperty('--bg',  hex)
@@ -326,37 +336,36 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
                 boxShadow: '0 -8px 32px rgba(0,0,0,0.6)'
               }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>
-                  Choose Background
+                  Background Color
                 </div>
 
-                {/* Preset swatches */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6, marginBottom: 12 }}>
-                  {BG_PRESETS.map(p => (
-                    <button key={p.color} title={p.label}
-                      onClick={() => { applyBg(p.color); setBgColor(p.color) }}
-                      style={{
-                        width: '100%', paddingTop: '100%', position: 'relative',
-                        borderRadius: 8, background: p.color, cursor: 'pointer',
-                        border: bgColor === p.color ? '2px solid #fff' : '2px solid rgba(255,255,255,0.15)',
-                        transition: 'border 0.15s'
-                      }}
-                    >
-                      {bgColor === p.color && (
-                        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Custom colour input */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Large open color picker — click to open full spectrum */}
+                <div
+                  onClick={() => colorInputRef.current?.click()}
+                  style={{
+                    width: '100%', height: 54, borderRadius: 10, marginBottom: 10,
+                    background: `linear-gradient(135deg, ${bgColor} 0%, ${bgColor}aa 100%)`,
+                    border: '2px solid rgba(255,255,255,0.2)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 8, fontSize: 12, fontWeight: 600, color: '#fff',
+                    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+                    position: 'relative', overflow: 'hidden'
+                  }}
+                >
+                  <span style={{ fontSize: 18 }}>🎨</span>
+                  <span>Open Color Picker</span>
                   <input
                     ref={colorInputRef}
                     type="color"
                     value={bgColor}
                     onChange={e => { applyBg(e.target.value); setBgColor(e.target.value) }}
-                    style={{ width: 36, height: 36, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'none', padding: 0 }}
+                    style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
                   />
+                </div>
+
+                {/* Hex input + reset */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <span style={{ width: 28, height: 28, borderRadius: 6, background: bgColor, border: '2px solid rgba(255,255,255,0.3)', flexShrink: 0 }} />
                   <input
                     type="text"
                     value={bgColor}
@@ -365,14 +374,34 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
                       setBgColor(v)
                       if (/^#[0-9a-fA-F]{6}$/.test(v)) applyBg(v)
                     }}
-                    style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '6px 10px', fontSize: 12, fontFamily: 'monospace' }}
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '5px 10px', fontSize: 12, fontFamily: 'monospace' }}
                     placeholder="#06060f"
                   />
                   <button
                     onClick={() => { applyBg('#06060f'); setBgColor('#06060f') }}
-                    title="Reset to default"
-                    style={{ padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 11 }}
+                    title="Reset"
+                    style={{ padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 13 }}
                   >↺</button>
+                </div>
+
+                {/* Preset swatches — 4 columns, 5 rows */}
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>Presets</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>
+                  {BG_PRESETS.map(p => (
+                    <button key={p.color} title={p.label}
+                      onClick={() => { applyBg(p.color); setBgColor(p.color) }}
+                      style={{
+                        width: '100%', paddingTop: '100%', position: 'relative',
+                        borderRadius: 7, background: p.color, cursor: 'pointer',
+                        border: bgColor === p.color ? '2px solid #fff' : '2px solid rgba(255,255,255,0.1)',
+                        transition: 'border 0.15s'
+                      }}
+                    >
+                      {bgColor === p.color && (
+                        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>✓</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

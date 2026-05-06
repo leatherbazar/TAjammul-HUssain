@@ -36,6 +36,47 @@ function getProfile(company) {
 // Table header color: dark charcoal
 const TABLE_HEAD_COLOR = [30, 30, 40]
 
+// ── PDF icon helpers ─────────────────────────────────────────────────────────
+// Draw a map pin icon (filled teardrop)
+function iconPin(doc, cx, cy) {
+  const s = 1.5
+  doc.setFillColor(210, 70, 20)
+  doc.circle(cx, cy - s * 0.25, s * 0.58, 'F')
+  // Downward triangle for the pin needle
+  doc.lines(
+    [[s * 0.52, 0], [-s * 0.26, s * 0.7], [-s * 0.26, -s * 0.7]],
+    cx - s * 0.52, cy - s * 0.25, [1, 1], 'F', true
+  )
+  // White centre dot
+  doc.setFillColor(255, 255, 255)
+  doc.circle(cx, cy - s * 0.25, s * 0.21, 'F')
+}
+
+// Draw a mobile phone icon
+function iconPhone(doc, cx, cy) {
+  const s = 1.5
+  doc.setFillColor(30, 155, 70)
+  doc.roundedRect(cx - s * 0.38, cy - s * 0.58, s * 0.76, s * 1.16, s * 0.12, s * 0.12, 'F')
+  doc.setFillColor(255, 255, 255)
+  // Screen area
+  doc.roundedRect(cx - s * 0.25, cy - s * 0.42, s * 0.5, s * 0.62, s * 0.05, s * 0.05, 'F')
+  // Home button dot
+  doc.circle(cx, cy + s * 0.42, s * 0.1, 'F')
+}
+
+// Draw an envelope icon
+function iconEmail(doc, cx, cy) {
+  const s = 1.5
+  doc.setFillColor(50, 100, 210)
+  doc.roundedRect(cx - s * 0.62, cy - s * 0.38, s * 1.24, s * 0.76, s * 0.08, s * 0.08, 'F')
+  // White V-fold lines
+  doc.setDrawColor(255, 255, 255)
+  doc.setLineWidth(0.5)
+  doc.lines([[s * 0.62, s * 0.38]], cx - s * 0.62, cy - s * 0.38, [1, 1], 'S')
+  doc.lines([[-s * 0.62, s * 0.38]], cx + s * 0.62, cy - s * 0.38, [1, 1], 'S')
+  doc.setLineWidth(0.4)
+}
+
 function loadImg(src) {
   return new Promise((resolve) => {
     const img = new Image()
@@ -74,32 +115,24 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
 
-  // Helper: draw a small icon dot with label
-  const iconDot = (x, y, r, g, b) => {
-    doc.setFillColor(r, g, b)
-    doc.circle(x, y - 1.2, 1.2, 'F')
-  }
-
-  // Address icon (orange dot) + text
+  // Address line with pin icon
   if (profile.address) {
-    iconDot(9.5, 27, 200, 100, 30)
-    doc.setTextColor(80, 80, 80)
-    doc.text(profile.address, 13, 27)
+    iconPin(doc, 10, 27)
+    doc.text(profile.address, 14, 27)
   }
 
-  // Phone icon (green dot) + Email icon (blue dot) on same line
-  let cx = 13
+  // Phone + Email on same row with icons
+  let icx = 14
   if (profile.phone) {
-    iconDot(9.5, 33, 40, 160, 80)
+    iconPhone(doc, 10, 33)
     doc.setTextColor(80, 80, 80)
-    doc.text(profile.phone, cx, 33)
-    cx += doc.getTextWidth(profile.phone) + 8
+    doc.text(profile.phone, icx, 33)
+    icx += doc.getTextWidth(profile.phone) + 10
   }
   if (profile.email) {
-    const eIconX = cx + 1.5
-    iconDot(eIconX, 33, 50, 100, 200)
+    iconEmail(doc, icx - 2, 33)
     doc.setTextColor(80, 80, 80)
-    doc.text(profile.email, eIconX + 3.5, 33)
+    doc.text(profile.email, icx + 2, 33)
   }
 
   // Document title (right, dark red)
