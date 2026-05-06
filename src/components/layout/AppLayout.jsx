@@ -1,7 +1,33 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import toast from 'react-hot-toast'
+
+// ── Background colour helper ─────────────────────────────────────────────────
+const BG_KEY = 'tat_bg_color'
+const BG_PRESETS = [
+  { label: 'Midnight',  color: '#06060f' },
+  { label: 'Deep Navy', color: '#060d1f' },
+  { label: 'Dark Teal', color: '#020f0f' },
+  { label: 'Forest',    color: '#030d06' },
+  { label: 'Maroon',    color: '#0f0306' },
+  { label: 'Charcoal',  color: '#111111' },
+  { label: 'Slate',     color: '#0d1117' },
+  { label: 'Warm Dark', color: '#120d08' },
+  { label: 'Purple',    color: '#0a0614' },
+  { label: 'Steel',     color: '#080c12' },
+]
+function applyBg(hex) {
+  document.documentElement.style.setProperty('--bg',  hex)
+  document.documentElement.style.setProperty('--bg2', hex + 'cc')
+  document.body.style.background = hex
+  localStorage.setItem(BG_KEY, hex)
+}
+// Apply saved bg on load
+;(() => {
+  const saved = localStorage.getItem(BG_KEY)
+  if (saved) applyBg(saved)
+})()
 
 const ADMIN_NAV = [
   { section: 'Overview' },
@@ -120,6 +146,9 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
   const [isInstalled, setIsInstalled]     = useState(false)
   const [showGuide, setShowGuide]         = useState(false)
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false)
+  const [showBgPicker, setShowBgPicker]   = useState(false)
+  const [bgColor, setBgColor]             = useState(() => localStorage.getItem(BG_KEY) || '#06060f')
+  const colorInputRef = useRef()
 
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setInstallPrompt(e) }
@@ -277,6 +306,86 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
               </div>
             </div>
           )}
+
+          {/* Background Colour Picker */}
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <button
+              onClick={() => setShowBgPicker(p => !p)}
+              style={{
+                width: '100%', padding: '8px 12px',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 10, color: '#fff',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 14, height: 14, borderRadius: 4, background: bgColor, border: '2px solid rgba(255,255,255,0.3)', display: 'inline-block', flexShrink: 0 }} />
+                🎨 Background
+              </span>
+              <span style={{ fontSize: 10, opacity: 0.6 }}>{showBgPicker ? '▲' : '▼'}</span>
+            </button>
+
+            {showBgPicker && (
+              <div style={{
+                position: 'absolute', bottom: '110%', left: 0, right: 0, zIndex: 200,
+                background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 12, padding: 14,
+                boxShadow: '0 -8px 32px rgba(0,0,0,0.6)'
+              }}>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>
+                  Choose Background
+                </div>
+
+                {/* Preset swatches */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6, marginBottom: 12 }}>
+                  {BG_PRESETS.map(p => (
+                    <button key={p.color} title={p.label}
+                      onClick={() => { applyBg(p.color); setBgColor(p.color) }}
+                      style={{
+                        width: '100%', paddingTop: '100%', position: 'relative',
+                        borderRadius: 8, background: p.color, cursor: 'pointer',
+                        border: bgColor === p.color ? '2px solid #fff' : '2px solid rgba(255,255,255,0.15)',
+                        transition: 'border 0.15s'
+                      }}
+                    >
+                      {bgColor === p.color && (
+                        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom colour input */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    ref={colorInputRef}
+                    type="color"
+                    value={bgColor}
+                    onChange={e => { applyBg(e.target.value); setBgColor(e.target.value) }}
+                    style={{ width: 36, height: 36, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'none', padding: 0 }}
+                  />
+                  <input
+                    type="text"
+                    value={bgColor}
+                    onChange={e => {
+                      const v = e.target.value
+                      setBgColor(v)
+                      if (/^#[0-9a-fA-F]{6}$/.test(v)) applyBg(v)
+                    }}
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '6px 10px', fontSize: 12, fontFamily: 'monospace' }}
+                    placeholder="#06060f"
+                  />
+                  <button
+                    onClick={() => { applyBg('#06060f'); setBgColor('#06060f') }}
+                    title="Reset to default"
+                    style={{ padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 11 }}
+                  >↺</button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Install App Button — always visible unless installed */}
           {isInstalled ? (
