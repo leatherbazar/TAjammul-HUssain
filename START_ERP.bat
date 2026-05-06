@@ -36,12 +36,12 @@ if not exist "node_modules\" (
     echo.
 )
 
-echo  [OK] Launching Tataheer ERP at http://localhost:3000
-echo  [OK] Browser will open automatically...
+echo  [OK] Starting API server on port 5000...
+echo  [OK] Starting UI server (browser will open automatically)...
 echo.
-echo  Press Ctrl+C to stop the server.
+echo  Press Ctrl+C to stop all servers.
 echo.
 
-call npm run dev
+call npm run dev:full
 
 pause
