@@ -4,16 +4,26 @@ import mongoose from 'mongoose'
 import cors from 'cors'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { v2 as cloudinary } from 'cloudinary'
-import multer from 'multer'
+// Cloudinary & Multer loaded dynamically to avoid ESM issues
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
 
-// ─── CLOUDINARY CONFIG ────────────────────────────────────────────────────────
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }) // 10MB limit
+let cloudinary, multerUpload
+try {
+  const cloudinaryPkg = await import('cloudinary')
+  cloudinary = cloudinaryPkg.v2
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  })
+  const multerPkg = await import('multer')
+  const multer = multerPkg.default
+  multerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+  console.log('✅ Cloudinary connected')
+} catch (e) {
+  console.warn('⚠️ Cloudinary not available:', e.message)
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -1547,7 +1557,10 @@ app.post('/api/restore', express.json({ limit: '50mb' }), async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Upload file to Cloudinary
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', (req, res, next) => {
+  if (!multerUpload) return res.status(503).json({ error: 'File upload not configured' })
+  multerUpload.single('file')(req, res, next)
+}, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' })
 
