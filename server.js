@@ -1219,15 +1219,55 @@ OTHER_COLLECTIONS.filter(n => n !== 'dayBook' && n !== 'supplyOrders').forEach(n
   })
   app.put(`/api/${name}/:id`, async (req, res) => {
     try {
-      const doc = await models[name].findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean()
+      // Try by custom id field first, then fallback to MongoDB _id
+      let doc = await models[name].findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean()
+      if (!doc) {
+        const mongoose = (await import('mongoose')).default
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+          doc = await models[name].findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true }).lean()
+        }
+      }
       if (!doc) return res.status(404).json({ error: 'Not found' })
       res.json(fmtLean(doc))
     } catch (err) { res.status(500).json({ error: err.message }) }
   })
   app.delete(`/api/${name}/:id`, async (req, res) => {
-    try { await models[name].findOneAndDelete({ id: req.params.id }); res.json({ ok: true }) }
+    try {
+      let deleted = await models[name].findOneAndDelete({ id: req.params.id })
+      if (!deleted) await models[name].findByIdAndDelete(req.params.id).catch(() => {})
+      res.json({ ok: true })
+    }
     catch (err) { res.status(500).json({ error: err.message }) }
   })
+})
+
+// ── Dedicated quotation status update (Approve / Reject) ──────────────────────
+app.patch('/api/quotations/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body
+    if (!['draft', 'sent', 'approved', 'cancelled', 'invoiced'].includes(status))
+      return res.status(400).json({ error: 'Invalid status' })
+
+    // Try by custom id, then by _id
+    let doc = await models['quotations'].findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { status, updatedAt: new Date() } },
+      { new: true }
+    ).lean()
+
+    if (!doc) {
+      const mongoose = (await import('mongoose')).default
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        doc = await models['quotations'].findByIdAndUpdate(
+          req.params.id,
+          { $set: { status, updatedAt: new Date() } },
+          { new: true }
+        ).lean()
+      }
+    }
+    if (!doc) return res.status(404).json({ error: 'Quotation not found' })
+    res.json(fmtLean(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════

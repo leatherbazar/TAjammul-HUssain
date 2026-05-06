@@ -234,6 +234,7 @@ function ClientRequestsAdmin() {
   const { data, updateRecord, addRecord, refreshData } = useApp()
   const [refreshing, setRefreshing] = React.useState(false)
   const [showSendQuote, setShowSendQuote] = React.useState(false)
+  const [statusLoading, setStatusLoading] = React.useState({})
   const requests = (data.quotations || []).filter(q => q.source === 'client' || q.source === 'admin')
   const clientList = data.users?.clients || []
 
@@ -247,6 +248,30 @@ function ClientRequestsAdmin() {
     const num = `QUO-${Date.now().toString().slice(-5)}`
     addRecord('quotations', { ...formData, number: num })
     setShowSendQuote(false)
+  }
+
+  // Reliable status update using dedicated endpoint
+  const handleStatusChange = async (q, newStatus) => {
+    setStatusLoading(prev => ({ ...prev, [q.id]: true }))
+    try {
+      const res = await fetch(`/api/quotations/${q.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        toast.error(`Failed to update: ${err.error || 'Server error'}`)
+        return
+      }
+      // Update local state to match server
+      updateRecord('quotations', q.id, { status: newStatus })
+      toast.success(newStatus === 'approved' ? '✅ Request Approved!' : '❌ Request Rejected!')
+    } catch {
+      toast.error('Connection error. Please try again.')
+    } finally {
+      setStatusLoading(prev => ({ ...prev, [q.id]: false }))
+    }
   }
 
   return (
@@ -295,16 +320,16 @@ function ClientRequestsAdmin() {
                         <>
                           <button
                             className="btn btn-success btn-xs"
-                            onClick={() => updateRecord('quotations', q.id, { status: 'approved' })}
-                            disabled={q.status === 'approved' || q.status === 'cancelled'}
+                            onClick={() => handleStatusChange(q, 'approved')}
+                            disabled={q.status === 'approved' || q.status === 'cancelled' || statusLoading[q.id]}
                             style={{ opacity: (q.status === 'approved' || q.status === 'cancelled') ? 0.4 : 1 }}
-                          >✅ Approve</button>
+                          >{statusLoading[q.id] ? '⏳' : '✅'} Approve</button>
                           <button
                             className="btn btn-danger btn-xs"
-                            onClick={() => updateRecord('quotations', q.id, { status: 'cancelled' })}
-                            disabled={q.status === 'approved' || q.status === 'cancelled'}
+                            onClick={() => handleStatusChange(q, 'cancelled')}
+                            disabled={q.status === 'approved' || q.status === 'cancelled' || statusLoading[q.id]}
                             style={{ opacity: (q.status === 'approved' || q.status === 'cancelled') ? 0.4 : 1 }}
-                          >✕ Reject</button>
+                          >{statusLoading[q.id] ? '⏳' : '✕'} Reject</button>
                         </>
                       )}
                     </div>
