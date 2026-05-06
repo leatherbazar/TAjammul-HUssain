@@ -101,23 +101,14 @@ function Navbar({ user, onLogout, onToggleSidebar }) {
           <img
             src="/logo-inf.png"
             alt="Infinity Corp"
-            style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
+            style={{ height: 54, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
           />
         ) : (
-          <>
-            <img
-              src="/logo-tat.png"
-              alt="TAT"
-              className="logo-img"
-              style={{ height: 44, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}
-            />
-            <img
-              src="/tataheer-dashboard-logo.png"
-              alt="Tataheer Traders"
-              style={{ height: 28, objectFit: 'contain', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) brightness(1.15)' }}
-              className="navbar-brand-text"
-            />
-          </>
+          <img
+            src="/logo-tbg.png"
+            alt="Tataheer Traders"
+            style={{ height: 48, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.6)) brightness(1.1)' }}
+          />
         )}
       </div>
 
