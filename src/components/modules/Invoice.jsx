@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
@@ -455,14 +456,14 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
   const total = subtotal + taxAmount
   const balance = total - (parseFloat(form.advancePaid) || 0)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.clientName) { toast.error('Client name required.'); return }
     if (form.items.length === 0) { toast.error('Add at least one item.'); return }
     if (!form.accountHeadID) {
       // Warn but allow — ledger entry just won't fire
       toast('⚠️ No client account linked — ledger will not update. Search & select the client from the dropdown to link.', { duration: 5000 })
     }
-    const num = form.number || nextInvoiceNumber()
+    const num = form.number || await nextInvoiceNumber()
     onSave({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax })
   }
 
@@ -909,7 +910,26 @@ export default function Invoices() {
                       </span>
                     )}
                   </td>
-                  <td><span className={`badge badge-${inv.status}`}>{inv.status}</span></td>
+                  <td>
+                    {/* Status dropdown — requires master code to change */}
+                    <select
+                      className={`badge badge-${inv.status}`}
+                      value={inv.status}
+                      style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontWeight: 700, fontSize: 11, padding: '3px 6px', borderRadius: 6 }}
+                      onChange={e => {
+                        const newStatus = e.target.value
+                        if (newStatus !== inv.status) {
+                          setMasterAction({ type: 'status', id: inv.id, newStatus, number: inv.number })
+                          // Reset select visually (master code will actually apply it)
+                          e.target.value = inv.status
+                        }
+                      }}
+                    >
+                      {['unpaid', 'partial', 'paid', 'cancelled'].map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button className="btn btn-secondary btn-xs" title="Edit"
@@ -945,11 +965,18 @@ export default function Invoices() {
       {/* Master Code gate */}
       {masterAction && (
         <MasterCodeModal
-          title={masterAction.type === 'delete' ? 'Confirm Delete' : 'Confirm Edit'}
+          title={
+            masterAction.type === 'delete' ? 'Confirm Delete' :
+            masterAction.type === 'status' ? `Change Status → ${masterAction.newStatus}` :
+            'Confirm Edit'
+          }
           onSuccess={() => {
             if (masterAction.type === 'delete') {
               deleteRecord('invoices', masterAction.id)
               toast.success('Invoice deleted.')
+            } else if (masterAction.type === 'status') {
+              updateRecord('invoices', masterAction.id, { status: masterAction.newStatus })
+              toast.success(`${masterAction.number} → ${masterAction.newStatus}`)
             } else {
               setSelected(masterAction.item)
               setView('edit')
