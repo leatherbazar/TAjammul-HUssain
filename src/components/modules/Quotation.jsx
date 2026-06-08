@@ -223,7 +223,7 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
 }
 
 export default function Quotations() {
-  const { data, addRecord, updateRecord, deleteRecord, nextInvoiceNumber, nextDocNumber, currentCompany } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, nextInvoiceNumber, nextDocNumber, currentCompany, currentCompanyId, refreshData } = useApp()
   const navigate = useNavigate()
   const [view, setView] = useState('list') // list | new | edit | detail
   const [selected, setSelected] = useState(null)
@@ -285,6 +285,48 @@ export default function Quotations() {
     setSelected(masterAction.q)
     setView('edit')
     setMasterAction(null)
+  }
+
+  // Convert quotation items → Supply Order in one click
+  const convertToSO = async (q) => {
+    const loadId = toast.loading('Creating Supply Order…')
+    try {
+      const num = await nextDocNumber('so')
+      const soItems = (q.items || []).map(item => ({
+        id: Date.now() + Math.random(),
+        description: item.description || '',
+        color: item.color || '',
+        qty: item.useMatrix ? calcMatrixTotal(item.matrixRows || []) : (parseInt(item.qty) || 1),
+        marketPrice: parseFloat(item.unitPrice) || 0,
+        useMatrix: false,
+        matrixRows: [],
+        note: '',
+      }))
+      const res = await fetch('/api/supplyOrders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Date.now().toString(),
+          number: num,
+          title: `${q.number} — ${q.clientName}`,
+          supplierName: '', supplierContact: '', accountHeadID: '',
+          date: new Date().toISOString().slice(0, 10),
+          items: soItems,
+          notes: `Auto-created from Quotation ${q.number}`,
+          status: 'pending', priority: 'normal',
+          sourceRef: q.number, sourceType: 'quotation',
+          companyId: currentCompanyId,
+          createdAt: new Date().toISOString(),
+        }),
+      })
+      if (!res.ok) throw new Error('Server error')
+      await refreshData()
+      toast.dismiss(loadId)
+      toast.success(`✅ Supply Order ${num} created from ${q.number}!`, { duration: 5000 })
+    } catch (err) {
+      toast.dismiss(loadId)
+      toast.error(`Failed: ${err.message || 'Check connection'}`)
+    }
   }
 
   // Navigate to Invoices with the quotation pre-loaded for editable conversion
@@ -374,6 +416,13 @@ export default function Quotations() {
                     ) : q.status === 'approved' ? (
                       <button className="btn btn-success btn-xs" onClick={() => convertToInvoice(q)}>→ Invoice</button>
                     ) : null}
+                    <button
+                      className="btn btn-secondary btn-xs"
+                      title="Convert all items to Supply Order"
+                      onClick={() => convertToSO(q)}
+                      style={{ borderColor: 'var(--blue)', color: 'var(--blue)', whiteSpace: 'nowrap' }}>
+                      🛒 SO
+                    </button>
                   </div>
                 </td>
               </tr>

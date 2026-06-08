@@ -710,7 +710,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
 // ─── Main Invoice List ────────────────────────────────────────────────────────
 export default function Invoices() {
-  const { data, addRecord, updateRecord, deleteRecord, currentCompany, currentCompanyId, refreshData } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentCompany, currentCompanyId, refreshData, nextDocNumber } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [fromQuotation, setFromQuotation] = useState(null)
@@ -796,6 +796,48 @@ export default function Invoices() {
     addRecord('deliveryNotes', { ...dnData, number: num })
     toast.success(`Delivery Note ${num} created!`)
     setDnModal(null)
+  }
+
+  // Convert invoice items → Supply Order in one click
+  const convertToSO = async (inv) => {
+    const loadId = toast.loading('Creating Supply Order…')
+    try {
+      const num = await nextDocNumber('so')
+      const soItems = (inv.items || []).map(item => ({
+        id: Date.now() + Math.random(),
+        description: item.description || '',
+        color: item.color || '',
+        qty: item.useMatrix ? calcMatrixTotal(item.matrixRows || []) : (parseInt(item.qty) || 1),
+        marketPrice: parseFloat(item.unitPrice) || 0,
+        useMatrix: false,
+        matrixRows: [],
+        note: '',
+      }))
+      const res = await fetch('/api/supplyOrders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Date.now().toString(),
+          number: num,
+          title: `${inv.number} — ${inv.clientName}`,
+          supplierName: '', supplierContact: '', accountHeadID: '',
+          date: new Date().toISOString().slice(0, 10),
+          items: soItems,
+          notes: `Auto-created from Invoice ${inv.number}`,
+          status: 'pending', priority: 'normal',
+          sourceRef: inv.number, sourceType: 'invoice',
+          companyId: currentCompanyId,
+          createdAt: new Date().toISOString(),
+        }),
+      })
+      if (!res.ok) throw new Error('Server error')
+      await refreshData()
+      toast.dismiss(loadId)
+      toast.success(`✅ Supply Order ${num} created from ${inv.number}!`, { duration: 5000 })
+    } catch (err) {
+      toast.dismiss(loadId)
+      toast.error(`Failed: ${err.message || 'Check connection'}`)
+    }
   }
 
   // Summary totals
@@ -979,6 +1021,11 @@ export default function Invoices() {
                         onClick={() => setDnModal(inv)}
                         style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
                         🚚
+                      </button>
+                      <button className="btn btn-secondary btn-xs" title="Convert to Supply Order"
+                        onClick={() => convertToSO(inv)}
+                        style={{ borderColor: 'var(--blue)', color: 'var(--blue)', whiteSpace: 'nowrap' }}>
+                        🛒 SO
                       </button>
                     </div>
                   </td>
