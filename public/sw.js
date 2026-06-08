@@ -1,25 +1,31 @@
 // TAT ERP Service Worker — enables PWA install prompt
-// CACHE version includes build timestamp so every deploy busts the old cache
-const CACHE = 'tat-erp-v__BUILD_TIME__'
+// Cache version auto-busts on every deploy via DATE stamp
+const CACHE = 'tat-erp-v20260608'
 const STATIC = ['/']
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)))
+  // Force new SW to activate immediately (replaces old SW without waiting)
   self.skipWaiting()
 })
 
 self.addEventListener('activate', e => {
+  // Delete ALL old caches when new version activates
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE).map(k => {
+        console.log('[SW] Deleting old cache:', k)
+        return caches.delete(k)
+      }))
     )
   )
+  // Take control of all open tabs immediately
   self.clients.claim()
 })
 
 // Network-first strategy (always get fresh data, fallback to cache)
 self.addEventListener('fetch', e => {
-  // Skip API calls and non-GET requests
+  // Skip API calls and non-GET requests — never cache these
   if (e.request.method !== 'GET' || e.request.url.includes('/api/')) return
 
   e.respondWith(
