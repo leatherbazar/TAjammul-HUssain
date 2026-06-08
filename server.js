@@ -1057,6 +1057,63 @@ app.post('/api/purchases', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Record payment to supplier (marks paid/partial + ledger + dayBook) ─────────
+app.post('/api/purchases/:id/payment', async (req, res) => {
+  try {
+    const { amount, wallet, date, notes } = req.body
+    const paid = parseFloat(amount) || 0
+    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+
+    const purchase = await Purchase.findOne({ id: req.params.id }).lean()
+    if (!purchase) return res.status(404).json({ error: 'Purchase not found' })
+
+    const prevPaid   = parseFloat(purchase.paidAmount) || 0
+    const total      = parseFloat(purchase.totalAmount) || 0
+    const newPaid    = prevPaid + paid
+    const newBalance = total - newPaid
+    const newStatus  = newBalance <= 0.01 ? 'paid' : 'partial'
+
+    const updated = await Purchase.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { paidAmount: newPaid, paymentStatus: newStatus } },
+      { new: true }
+    ).lean()
+
+    // ── Ledger: debit on supplier account (we paid them — reduces AP) ──────────
+    if (purchase.accountHeadID) {
+      await postLedgerEntry({
+        accountHeadID: purchase.accountHeadID,
+        contactName:   purchase.supplierName,
+        date:          date || new Date().toISOString().slice(0, 10),
+        description:   `Payment to supplier for ${purchase.number}`,
+        documentRef:   purchase.number,
+        documentType:  'payment',
+        debit:         paid,   // debit on supplier = we paid them (AP decreases)
+        credit:        0,
+      })
+    }
+
+    // ── DayBook: expense (cash/bank goes out) ─────────────────────────────────
+    await models.dayBook.create({
+      id:          Date.now().toString(),
+      date:        date || new Date().toISOString().slice(0, 10),
+      type:        'expense',
+      category:    'Supplier Payment',
+      description: `Paid to ${purchase.supplierName || 'Supplier'} for ${purchase.number}`,
+      partyName:   purchase.supplierName || '',
+      accountHeadID: purchase.accountHeadID || '',
+      reference:   purchase.number,
+      debit:       0,
+      credit:      paid,   // cash goes out
+      wallet:      wallet || 'Cash',
+      notes:       notes || '',
+      companyId:   purchase.companyId || 'TAT',
+    })
+
+    res.json({ ok: true, purchase: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 app.put('/api/purchases/:id', async (req, res) => {
   try {
     const doc = await Purchase.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true }).lean()

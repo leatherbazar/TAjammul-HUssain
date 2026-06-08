@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import ContactSelect from '../common/ContactSelect'
 import MasterCodeModal from '../common/MasterCodeModal'
 import Attachments from '../common/Attachments'
@@ -215,12 +216,98 @@ function ConvertSOModal({ order, onConfirm, onCancel }) {
   )
 }
 
+// ─── Pay Supplier Modal ───────────────────────────────────────────────────────
+const WALLETS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa']
+
+function PaySupplierModal({ purchase, onClose, onSuccess }) {
+  const balance = (purchase.totalAmount || 0) - (purchase.paidAmount || 0)
+  const [amount, setAmount]   = useState(String(balance))
+  const [wallet, setWallet]   = useState('Cash')
+  const [date, setDate]       = useState(new Date().toISOString().slice(0, 10))
+  const [notes, setNotes]     = useState('')
+  const [saving, setSaving]   = useState(false)
+
+  const handlePay = async () => {
+    const amt = parseFloat(amount)
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount.'); return }
+    if (amt > balance + 0.01) { toast.error(`Amount exceeds balance PKR ${balance.toLocaleString()}`); return }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/purchases/${purchase.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt, wallet, date, notes }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || 'Payment failed'); return }
+      toast.success(`PKR ${amt.toLocaleString()} paid to ${purchase.supplierName}! ${data.status === 'paid' ? '✅ Fully settled' : '⏳ Partial'}`)
+      onSuccess()
+    } catch { toast.error('Network error') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">💳 Pay Supplier — {purchase.number}</div>
+
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Supplier: <strong style={{ color: 'var(--text)' }}>{purchase.supplierName}</strong></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <span>Total: <strong>PKR {Number(purchase.totalAmount || 0).toLocaleString()}</strong></span>
+            <span>Already Paid: <strong style={{ color: 'var(--green)' }}>PKR {Number(purchase.paidAmount || 0).toLocaleString()}</strong></span>
+            <span>Balance: <strong style={{ color: 'var(--red)' }}>PKR {Number(balance).toLocaleString()}</strong></span>
+          </div>
+        </div>
+
+        <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
+          <div className="input-group">
+            <label className="input-label">Amount Paying (PKR) *</label>
+            <input className="input" type="number" min="1" max={balance}
+              value={amount} onChange={e => setAmount(e.target.value)}
+              style={{ fontWeight: 800, fontSize: 18, color: 'var(--amber)' }} />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Payment Date</label>
+            <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="input-group" style={{ marginBottom: 14 }}>
+          <label className="input-label">Paid From Wallet</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {WALLETS.map(w => (
+              <button key={w}
+                className={`btn btn-sm ${wallet === w ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setWallet(w)}
+              >{w}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="input-group" style={{ marginBottom: 16 }}>
+          <label className="input-label">Notes (optional)</label>
+          <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Cheque no., transfer ref..." />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handlePay} disabled={saving}>
+            {saving ? '⏳ Processing…' : `💳 Pay PKR ${Number(amount || 0).toLocaleString()}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Purchase Module ─────────────────────────────────────────────────────
 export default function Purchases() {
   const { data, addRecord, updateRecord, deleteRecord, refreshData, currentUser } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [convertModal, setConvertModal] = useState(null) // supply order to convert
+  const [payModal, setPayModal] = useState(null)         // supplier payment
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('purchases') // 'purchases' | 'supply-orders'
@@ -369,7 +456,16 @@ export default function Purchases() {
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 4 }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {/* Pay supplier — only show if balance > 0 */}
+                          {balance > 0 && (
+                            <button
+                              className="btn btn-xs"
+                              style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)', color: 'var(--green)', fontWeight: 700 }}
+                              onClick={() => setPayModal(p)}
+                              title="Record supplier payment"
+                            >💳 Pay</button>
+                          )}
                           <button className="btn btn-secondary btn-xs" onClick={() => setMasterAction({ type: 'edit', item: p })} title="Edit">✏️</button>
                           <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: p.id })} title="Delete">🗑️</button>
                         </div>
@@ -419,6 +515,15 @@ export default function Purchases() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Pay Supplier Modal */}
+      {payModal && (
+        <PaySupplierModal
+          purchase={payModal}
+          onClose={() => setPayModal(null)}
+          onSuccess={async () => { setPayModal(null); await refreshData() }}
+        />
       )}
 
       {/* Convert SO Modal */}
