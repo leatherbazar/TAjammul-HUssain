@@ -2678,7 +2678,7 @@ function Students() {
                       <td className="px-4 py-3 hidden sm:table-cell">{s.familyId ? <Badge color="blue">{s.familyId}</Badge> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-4 py-3 hidden sm:table-cell">{s.family ? <Badge color="purple">{s.family}</Badge> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-4 py-3 hidden md:table-cell">{s.annualFund ? <Badge color="purple">AF Rs. {Number(s.annualFund).toLocaleString()}</Badge> : <span className="text-gray-300">—</span>}</td>
-                      <td className="px-4 py-3 hidden md:table-cell">{Number(s.openingBalance||0) !== 0 ? <span className={`font-bold text-sm ${Number(s.openingBalance) < 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{Number(s.openingBalance) < 0 ? `Adv Rs. ${Math.abs(Number(s.openingBalance)).toLocaleString()}` : `Rs. ${Number(s.openingBalance).toLocaleString()}`}</span> : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-4 py-3 hidden md:table-cell">{Number(s.openingBalance||0) !== 0 ? <span className={`font-bold text-sm ${Number(s.openingBalance) < 0 ? 'text-emerald-600' : 'text-orange-600'}`}>Rs. {Math.abs(Number(s.openingBalance)).toLocaleString()}</span> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{s.contact || '—'}</td>
                       <td className="px-4 py-3 text-gray-500 hidden md:table-cell text-xs">{s.address || '—'}</td>
                       <td className="px-4 py-3 text-right">
