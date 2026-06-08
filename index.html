@@ -1848,7 +1848,10 @@ function Dashboard({ setPage }) {
           <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">📅 Period:</span>
           <select value={selDashMonth} onChange={e => setSelDashMonth(Number(e.target.value))}
             className="border-2 border-blue-200 rounded-lg px-3 py-1.5 text-sm font-semibold text-blue-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
-            {MONTH_NAMES.map((nm, i) => <option key={i} value={i}>{nm}</option>)}
+            {MONTH_NAMES.map((nm, i) => {
+                if (selDashYear === ENGINE_CUTOFF_YEAR && i < ENGINE_CUTOFF_MONTH) return null;
+                return <option key={i} value={i}>{nm}</option>;
+              })}
           </select>
           <select value={selDashYear} onChange={e => setSelDashYear(Number(e.target.value))}
             className="border-2 border-blue-200 rounded-lg px-3 py-1.5 text-sm font-semibold text-blue-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
@@ -2602,7 +2605,7 @@ function Students() {
               {totalDiscount > 0 && (
                 <p className="text-xs text-emerald-600 font-semibold mt-0.5">🏷 Discount: Rs. {totalDiscount.toLocaleString()}</p>
               )}
-              <p className="text-xs text-gray-400 mt-0.5">After discount (Khalis Amdani)</p>
+              <p className="text-xs text-gray-400 mt-0.5">After discount</p>
             </div>
             <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
               <p className="text-xs text-purple-600 font-semibold uppercase mb-1">🏦 Annual Fund</p>
@@ -9931,7 +9934,7 @@ const NAV_ALL = [
   { id:'books',         label:'Books & Vendors', icon:'📚',  roles:['admin','staff','principal'] },
   { id:'exams',         label:'Exams',           icon:'📝',  roles:['admin','staff','principal'] },
   { id:'cashbook',      label:'Cash Book',       icon:'💼',  roles:['admin','principal','accountant'] },
-  { id:'assets',        label:'Assets & P&L',   icon:'🏛️',  roles:['admin','principal','accountant'] },
+  { id:'assets',        label:'Assets & P&L',   icon:'🏛️',  roles:['admin'] },
   { id:'notifications', label:'Notifications',   icon:'📢',  roles:['admin','principal','teacher'] },
   { id:'users',         label:'User Management', icon:'🔐',  roles:['admin'] },
   { id:'security',      label:'Security',        icon:'🛡️',  roles:['admin'] },
