@@ -1,6 +1,6 @@
 // TAT ERP Service Worker — enables PWA install prompt
 // Cache version auto-busts on every deploy via DATE stamp
-const CACHE = 'tat-erp-v20260608'
+const CACHE = 'tat-erp-v__BUILD_TIME__'
 const STATIC = ['/']
 
 self.addEventListener('install', e => {
