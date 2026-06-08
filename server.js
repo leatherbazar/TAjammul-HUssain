@@ -823,7 +823,18 @@ app.delete('/api/dayBook/:id', async (req, res) => {
       const debit  = parseFloat(entry.debit)  || 0
       const credit = parseFloat(entry.credit) || 0
       if (debit > 0 || credit > 0) {
-        // Post a reversing entry (swap debit ↔ credit to undo the effect)
+        // Re-apply the SAME direction logic used when the entry was originally posted,
+        // so we know what was ACTUALLY written to the ledger, then reverse it.
+        const type = (entry.type     || '').toLowerCase()
+        const cat  = (entry.category || '').toLowerCase()
+        let ledgerDebit = debit, ledgerCredit = credit
+        if (type === 'income' && cat !== 'sale' && cat !== 'client payment') {
+          ledgerDebit = 0; ledgerCredit = debit || credit
+        } else if (type === 'expense' && cat !== 'purchase' && cat !== 'supplier payment') {
+          ledgerDebit = credit || debit; ledgerCredit = 0
+        }
+
+        // Reverse: post exact opposite of what the ledger received
         await postLedgerEntry({
           accountHeadID: entry.accountHeadID,
           contactName:   entry.contactName || entry.partyName,
@@ -831,8 +842,8 @@ app.delete('/api/dayBook/:id', async (req, res) => {
           description:   `[Reversed] ${entry.description}`,
           documentRef:   `REV-${entry.id}`,
           documentType:  'reversal',
-          debit:  credit,  // swap: what was credited is now debited back
-          credit: debit,   // swap: what was debited is now credited back
+          debit:  ledgerCredit,   // what was credited → debit back
+          credit: ledgerDebit,    // what was debited  → credit back
         })
       }
     }

@@ -392,7 +392,7 @@ function DayBook() {
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => setEditEntry(e)}>✏️</button>
-                    <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ id: e.id })}>🗑️</button>
+                    <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ id: e.id, description: e.description, hasLedger: !!e.accountHeadID })}>🗑️</button>
                   </div>
                 </td>
               </tr>
@@ -402,7 +402,12 @@ function DayBook() {
       </div>
 
       {masterAction && (
-        <MasterCodeModal title="Confirm Delete Entry" onSuccess={() => handleDelete(masterAction.id)} onCancel={() => setMasterAction(null)} />
+        <MasterCodeModal
+          title={masterAction.hasLedger ? '🗑️ Delete + Reverse Ledger' : '🗑️ Delete Entry'}
+          subtitle={masterAction.description ? `"${masterAction.description}"${masterAction.hasLedger ? '\n✅ Ledger will auto-reverse.' : ''}` : undefined}
+          onSuccess={() => handleDelete(masterAction.id)}
+          onCancel={() => setMasterAction(null)}
+        />
       )}
       {editEntry && (
         <EditEntryModal

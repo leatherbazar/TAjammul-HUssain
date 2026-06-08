@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 
-export default function MasterCodeModal({ onSuccess, onCancel, title = 'Enter Master Code' }) {
+export default function MasterCodeModal({ onSuccess, onCancel, title = 'Enter Master Code', subtitle }) {
   const { verifyMasterCode } = useApp()
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
@@ -30,6 +30,11 @@ export default function MasterCodeModal({ onSuccess, onCancel, title = 'Enter Ma
           <span style={{ fontSize: 24 }}>🔐</span>
           {title}
         </div>
+        {subtitle && (
+          <p style={{ fontSize: 12, color: 'var(--amber)', marginBottom: 8, whiteSpace: 'pre-line', fontWeight: 600 }}>
+            {subtitle}
+          </p>
+        )}
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
           This action requires the Master Security Code.
         </p>
