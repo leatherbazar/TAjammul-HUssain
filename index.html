@@ -1602,7 +1602,7 @@ function Dashboard({ setPage }) {
   const inventory = S.get(K.INV, []);
   const payments  = S.get(K.PAY, []).filter(isFromCutoff);
   const classFees = S.get(K.CF, {});
-  const expenses  = S.get(K.EXP, []).filter(e => isCBFromCutoff({date: e.date}));
+  const expenses  = S.get(K.EXP, []);
 
   // ── Period selector — Tier 2 Operational Summary auto-rolls every month.
   // Defaults to CURRENT month; user can pick any past month to view its snapshot.
@@ -3205,7 +3205,7 @@ function Fees() {
   const [tab, setTab]           = useState('status');
   const students                = S.get(K.STU, []);
   const [classFees, setClassFees] = useState(() => S.get(K.CF, {}));
-  const [payments, setPayments] = useState(() => S.get(K.PAY, []).filter(isFromCutoff));
+  const [payments, setPayments] = useState(() => S.get(K.PAY, []));
   const [payMod, setPayMod]     = useState(null);
   const [receipt, setReceipt]   = useState(null);
   const [histStu, setHistStu]   = useState('');
@@ -3724,7 +3724,7 @@ function FeeCollection() {
   const { staffCanModify } = React.useContext(PermContext);
   const [students]  = useState(() => S.get(K.STU, []));
   const [classFees] = useState(() => S.get(K.CF, {}));
-  const [payments, setPayments] = useState(() => S.get(K.PAY, []).filter(isFromCutoff));
+  const [payments, setPayments] = useState(() => S.get(K.PAY, []));
   const [search, setSearch] = useState('');
   const [fcls, setFcls]     = useState('All');
   const [collMod, setCollMod] = useState(null);
@@ -5042,7 +5042,7 @@ function Expenses() {
   const isAccountant = role === 'accountant';
   const canAdd       = isAdmin || isPrincipal || isAccountant;
   const canWrite    = isAdmin;                // only admin can edit/delete
-  const [list, setList] = useState(() => S.get(K.EXP, []).filter(e => isCBFromCutoff({date: e.date})));
+  const [list, setList] = useState(() => S.get(K.EXP, []));
   const [form, setForm] = useState(null);
   const [delId, setDelId] = useState(null);
   const [fm, setFm] = useState(NOW.getMonth());
@@ -5294,7 +5294,7 @@ function FamilyLedger() {
   const { role } = React.useContext(UserContext);
   const isAdmin = role === 'admin';
   const [allStudents, setAllStudents] = useState(() => S.get(K.STU, []));
-  const [allPayments, setAllPayments] = useState(() => S.get(K.PAY, []).filter(isFromCutoff));
+  const [allPayments, setAllPayments] = useState(() => S.get(K.PAY, []));
   const classFees = S.get(K.CF, {});
 
   const [selFamily, setSelFamily] = useState('');
