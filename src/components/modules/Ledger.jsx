@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import toast from 'react-hot-toast'
 import { exportLedgerPDF } from '../../utils/pdfExport'
 
@@ -96,7 +97,8 @@ function PaySupplierModal({ contact, onClose, onSuccess }) {
     setSaving(true)
     try {
       const docRef = ref || `PAY-${Date.now().toString().slice(-6)}`
-      // Ledger debit entry (we paid the supplier → reduces what we owe)
+
+      // ── 1. Ledger: DEBIT on supplier account (reduces AP — we paid them) ──────
       await fetch('/api/ledger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +112,10 @@ function PaySupplierModal({ contact, onClose, onSuccess }) {
           debit: amt, credit: 0,
         }),
       })
-      // DayBook expense entry (cash/bank going out)
+
+      // ── 2. DayBook: expense (cash goes OUT of wallet) ─────────────────────────
+      // NOTE: No accountHeadID here — ledger was already updated above.
+      // Passing accountHeadID would double-post to ledger via server auto-trigger.
       await fetch('/api/dayBook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,10 +124,10 @@ function PaySupplierModal({ contact, onClose, onSuccess }) {
           category:    'Supplier Payment',
           description: `Payment to ${contact.name}${notes ? ' — ' + notes : ''}`,
           partyName:   contact.name,
-          accountHeadID: contact.accountHeadID,
           reference:   docRef,
           wallet,
-          debit: amt, credit: 0,
+          debit:  0,
+          credit: amt,   // ✅ expense = credit (cash leaving the business)
         }),
       })
       toast.success(`PKR ${amt.toLocaleString()} paid to ${contact.name}!`)

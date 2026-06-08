@@ -671,16 +671,39 @@ app.post('/api/dayBook', async (req, res) => {
       const debit  = parseFloat(req.body.debit)  || 0
       const credit = parseFloat(req.body.credit) || 0
       if (debit > 0 || credit > 0) {
-        await postLedgerEntry({
-          accountHeadID: req.body.accountHeadID,
-          contactName:   req.body.partyName || req.body.description,
-          date:          req.body.date,
-          description:   req.body.description || 'Day Book Entry',
-          documentRef:   req.body.reference  || doc.id,
-          documentType:  'daybook',
-          debit,
-          credit,
-        })
+        // ── Direction logic ───────────────────────────────────────────────────
+        // DayBook "income" = money coming IN (debit in DayBook)
+        //   → on client ledger this is a CREDIT (they paid us, AR reduces)
+        // DayBook "expense" = money going OUT (credit in DayBook)
+        //   → on supplier ledger this is a DEBIT (we paid them, AP reduces)
+        // For manual entries with no type, pass through as-is.
+        let ledgerDebit  = debit
+        let ledgerCredit = credit
+        const type = (req.body.type || '').toLowerCase()
+        const cat  = (req.body.category || '').toLowerCase()
+        if (type === 'income' && cat !== 'sale') {
+          // Payment received from client → credit on their account
+          ledgerDebit  = 0
+          ledgerCredit = debit || credit
+        } else if (type === 'expense' && cat !== 'purchase') {
+          // Payment made to supplier → debit on their account
+          ledgerDebit  = credit || debit
+          ledgerCredit = 0
+        }
+        // 'sale' and 'purchase' auto-entries are handled by their own endpoints
+        // and should not double-post here — skip them
+        if (cat !== 'sale' && cat !== 'purchase' && cat !== 'client payment') {
+          await postLedgerEntry({
+            accountHeadID: req.body.accountHeadID,
+            contactName:   req.body.partyName || req.body.description,
+            date:          req.body.date,
+            description:   req.body.description || 'Day Book Entry',
+            documentRef:   req.body.reference  || doc.id,
+            documentType:  'daybook',
+            debit:  ledgerDebit,
+            credit: ledgerCredit,
+          })
+        }
       }
     }
 

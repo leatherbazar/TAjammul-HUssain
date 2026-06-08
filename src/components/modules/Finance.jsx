@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
 import { exportDayBookExcel } from '../../utils/excelExport'
@@ -302,8 +303,11 @@ function DayBook() {
               placeholder="Search contact (optional)..."
             />
             {form.accountHeadID && (
-              <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 3, fontFamily: 'monospace' }}>
-                {form.accountHeadID}
+              <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'monospace', color: 'var(--blue)', fontWeight: 700 }}>{form.accountHeadID}</span>
+                <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', color: 'var(--green)', fontWeight: 700, fontSize: 10, letterSpacing: 0.3 }}>
+                  ✅ Ledger auto-updates
+                </span>
               </div>
             )}
           </div>
