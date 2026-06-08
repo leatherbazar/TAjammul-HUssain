@@ -2585,7 +2585,8 @@ function Students() {
         }, 0);
         const activeFiltered = filtered.filter(isActiveStu);
         // ── Global Engine: getStuNetMonthlyDue = classFee − discount (Khalis Amdani) ──
-        const totalNetDue = activeFiltered.reduce((s, st) => s + getStuNetMonthlyDue(st, classFees), 0);
+        const totalNetDue   = activeFiltered.reduce((s, st) => s + getStuNetMonthlyDue(st, classFees), 0);
+        const totalDiscount = activeFiltered.reduce((s, st) => s + getStuDisc(st, classFees), 0);
         const withAF    = activeFiltered.filter(st => Number(st.annualFund||0) > 0).length;
         const withBooks = activeFiltered.filter(st => (bookLists[st.id]||[]).length > 0).length;
         return (
@@ -2598,6 +2599,9 @@ function Students() {
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
               <p className="text-xs text-red-500 font-semibold uppercase mb-1">📋 Net Due</p>
               <p className="text-xl font-extrabold text-red-600">Rs. {totalNetDue.toLocaleString()}</p>
+              {totalDiscount > 0 && (
+                <p className="text-xs text-emerald-600 font-semibold mt-0.5">🏷 Discount: Rs. {totalDiscount.toLocaleString()}</p>
+              )}
               <p className="text-xs text-gray-400 mt-0.5">After discount (Khalis Amdani)</p>
             </div>
             <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
