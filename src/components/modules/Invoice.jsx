@@ -456,15 +456,24 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
   const total = subtotal + taxAmount
   const balance = total - (parseFloat(form.advancePaid) || 0)
 
+  const [saving, setSaving] = useState(false)
+
   const handleSave = async () => {
     if (!form.clientName) { toast.error('Client name required.'); return }
     if (form.items.length === 0) { toast.error('Add at least one item.'); return }
     if (!form.accountHeadID) {
-      // Warn but allow — ledger entry just won't fire
-      toast('⚠️ No client account linked — ledger will not update. Search & select the client from the dropdown to link.', { duration: 5000 })
+      toast('⚠️ No client account linked — ledger will not update.', { duration: 4000 })
     }
-    const num = form.number || await nextInvoiceNumber()
-    onSave({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax })
+    setSaving(true)
+    try {
+      const num = form.number || await nextInvoiceNumber()
+      if (!num) throw new Error('Could not generate invoice number')
+      await onSave({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax })
+    } catch (err) {
+      toast.error(`Save failed: ${err.message || 'Check your connection'}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // Related delivery notes (only if editing existing invoice)
@@ -690,7 +699,9 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
             const num = form.number || `INV-${Date.now().toString().slice(-3)}`
             exportInvoicePDF({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax }, form.stealthPrint, currentCompany)
           }}>🖨️ Preview PDF</button>
-          <button className="btn btn-primary" onClick={handleSave}>💾 Save Invoice</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
+            {saving ? '⏳ Saving…' : '💾 Save Invoice'}
+          </button>
         </div>
       </div>
     </div>
@@ -699,7 +710,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
 // ─── Main Invoice List ────────────────────────────────────────────────────────
 export default function Invoices() {
-  const { data, addRecord, updateRecord, deleteRecord, currentCompany } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, currentCompany, currentCompanyId, refreshData } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [fromQuotation, setFromQuotation] = useState(null)
@@ -731,18 +742,42 @@ export default function Invoices() {
     return list
   }, [data.invoices, search, statusFilter])
 
-  const handleSave = (f) => {
-    if (selected) {
-      updateRecord('invoices', selected.id, f)
-      toast.success(`Invoice ${f.number} updated!`)
-    } else {
-      addRecord('invoices', f)
-      if (fromQuotation) {
-        updateRecord('quotations', fromQuotation.id, { status: 'invoiced' })
+  const handleSave = async (f) => {
+    try {
+      const loadId = toast.loading('Saving invoice…')
+      if (selected) {
+        await fetch(`/api/invoices/${selected.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(f),
+        }).then(r => { if (!r.ok) throw new Error('Server error') })
+        updateRecord('invoices', selected.id, f)
+        toast.dismiss(loadId)
+        toast.success(`Invoice ${f.number} updated!`)
+      } else {
+        const res = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...f, id: Date.now().toString(), createdAt: new Date().toISOString(), companyId: currentCompanyId }),
+        })
+        const saved = await res.json()
+        if (!res.ok) throw new Error(saved.error || 'Server error')
+        if (fromQuotation) {
+          await fetch(`/api/quotations/${fromQuotation.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'invoiced' }),
+          })
+          updateRecord('quotations', fromQuotation.id, { status: 'invoiced' })
+        }
+        await refreshData()
+        toast.dismiss(loadId)
+        toast.success(`Invoice ${saved.number || f.number} created!`)
       }
-      toast.success(`Invoice ${f.number} created!`)
+      setView('list'); setSelected(null); setFromQuotation(null)
+    } catch (err) {
+      throw err  // re-throw so InvoiceForm.handleSave catch shows the toast
     }
-    setView('list'); setSelected(null); setFromQuotation(null)
   }
 
   const handleGenerateDN = (dnData) => {
