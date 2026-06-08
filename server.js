@@ -563,7 +563,31 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
   try {
-    const invoice = await Invoice.create(req.body)
+    // ── Sanitise invoice number ───────────────────────────────────────────────
+    // Guard against "[object Promise]" or blank numbers saved by old client bug.
+    // If number is bad, auto-generate a safe unique one before inserting.
+    let safeNumber = req.body.number
+    const isBad = !safeNumber
+      || String(safeNumber).includes('[object')
+      || String(safeNumber).trim() === ''
+    if (isBad) {
+      // Find the highest existing INV-xxx and increment from there
+      const last = await Invoice.findOne(
+        { number: /^INV-\d+$/ }, { number: 1 }
+      ).sort({ createdAt: -1 }).lean()
+      const lastNum = last ? (parseInt(last.number.replace('INV-', '')) || 200) : 200
+      safeNumber = `INV-${lastNum + 1}`
+      // Also bump the company counter so next auto-number is consistent
+      const cid = req.body.companyId || 'TAT'
+      const cDoc = await Singleton.findOne({ key: 'companies' }).lean()
+      if (cDoc) {
+        const updated = (cDoc.value || []).map(c =>
+          c.id === cid ? { ...c, invoiceCounter: Math.max((c.invoiceCounter || 0), lastNum + 2) } : c
+        )
+        await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
+      }
+    }
+    const invoice = await Invoice.create({ ...req.body, number: safeNumber })
 
     // ── LEDGER TRIGGER ────────────────────────────────────────────────────────
     if (req.body.accountHeadID && req.body.total > 0) {
@@ -599,6 +623,36 @@ app.delete('/api/invoices/:id', async (req, res) => {
   try {
     await Invoice.findOneAndDelete({ id: req.params.id })
     res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── One-time cleanup: fix any invoices saved with "[object Promise]" number ───
+app.post('/api/invoices/fix-bad-numbers', async (req, res) => {
+  try {
+    const bad = await Invoice.find({
+      $or: [
+        { number: { $regex: '\\[object' } },
+        { number: '' },
+        { number: { $exists: false } },
+        { number: null },
+      ]
+    }).lean()
+
+    let fixed = 0
+    for (const inv of bad) {
+      // Find highest existing INV-xxx
+      const last = await Invoice.findOne(
+        { number: /^INV-\d+$/ }, { number: 1 }
+      ).sort({ number: -1 }).lean()
+      const lastNum = last ? (parseInt(last.number.replace('INV-', '')) || 200) : 200
+      const newNum = `INV-${lastNum + 1}`
+      await Invoice.findOneAndUpdate(
+        { _id: inv._id },
+        { $set: { number: newNum } }
+      )
+      fixed++
+    }
+    res.json({ ok: true, fixed, message: `Fixed ${fixed} invoice(s) with bad numbers` })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
