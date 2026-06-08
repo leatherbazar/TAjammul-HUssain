@@ -280,21 +280,41 @@ mongoose.connection.once('open', async () => {
       { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '426- Ali Arcade, 13-km Main Multan Road, Lahore', phone: '+92(314)4094900', email: 'tataheertraders@gmail.com', active: true },
       { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '101- Choudery Plaza Royal Park Lahore', phone: '+92-314-855-5566', email: 'infinity.crop512@gmail.com', active: true },
     ]}}, { upsert: true })
-    // Force-update INF contact details + backfill per-company wallets
+    // Force-update INF contact details + backfill per-company wallets + fix invoice counters
     {
       const doc = await Singleton.findOne({ key: 'companies' }).lean()
       if (doc) {
-        const updated = (doc.value || []).map(c => ({
-          ...c,
-          // Ensure every company has its own wallets bucket
-          wallets: c.wallets || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
-          ...(c.id === 'INF' ? {
-            address: '101- Choudery Plaza Royal Park Lahore',
-            phone: '+92-314-855-5566',
-            email: 'infinity.crop512@gmail.com',
-          } : {}),
-        }))
+        // Find the highest existing INV-xxx number in the database
+        const lastInv = await Invoice.findOne(
+          { number: /^INV-\d+$/ }, { number: 1 }
+        ).sort({ number: -1 }).lean()
+        const highestInvNum = lastInv
+          ? (parseInt(lastInv.number.replace('INV-', '')) || 0)
+          : 0
+
+        // Minimum floor per company (never go below this)
+        const FLOOR = { TAT: 201, INF: 180 }
+
+        const updated = (doc.value || []).map(c => {
+          const floor   = FLOOR[c.id] || 201
+          // Counter must be > highest existing number AND >= floor
+          const minNext = Math.max(floor, highestInvNum + 1)
+          const counter = Math.max(c.invoiceCounter || 0, minNext)
+          return {
+            ...c,
+            invoiceCounter: counter,
+            // Ensure every company has its own wallets bucket
+            wallets: c.wallets || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
+            ...(c.id === 'INF' ? {
+              address: '101- Choudery Plaza Royal Park Lahore',
+              phone: '+92-314-855-5566',
+              email: 'infinity.crop512@gmail.com',
+            } : {}),
+          }
+        })
         await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
+        const tatCounter = updated.find(c => c.id === 'TAT')?.invoiceCounter
+        console.log(`✅ TAT invoiceCounter synced to ${tatCounter} (highest existing: INV-${highestInvNum})`)
       }
     }
     await User.findOneAndUpdate(
@@ -571,11 +591,12 @@ app.post('/api/invoices', async (req, res) => {
       || String(safeNumber).includes('[object')
       || String(safeNumber).trim() === ''
     if (isBad) {
-      // Find the highest existing INV-xxx and increment from there
-      const last = await Invoice.findOne(
-        { number: /^INV-\d+$/ }, { number: 1 }
-      ).sort({ createdAt: -1 }).lean()
-      const lastNum = last ? (parseInt(last.number.replace('INV-', '')) || 200) : 200
+      // Find the highest existing INV-xxx by numeric value
+      const all = await Invoice.find({ number: /^INV-\d+$/ }, { number: 1 }).lean()
+      const lastNum = all.reduce((max, inv) => {
+        const n = parseInt(inv.number.replace('INV-', '')) || 0
+        return Math.max(max, n)
+      }, 200)
       safeNumber = `INV-${lastNum + 1}`
       // Also bump the company counter so next auto-number is consistent
       const cid = req.body.companyId || 'TAT'
@@ -1643,7 +1664,9 @@ app.post('/api/companies/:id/next-invoice', async (req, res) => {
     const companies = doc?.value || []
     const company = companies.find(c => c.id === req.params.id)
     if (!company) return res.status(404).json({ error: 'Company not found' })
-    const num = company.invoiceCounter || 1
+    // Skip any numbers that already exist in the database (safety against duplicates)
+    let num = company.invoiceCounter || 201
+    while (await Invoice.exists({ number: `INV-${num}` })) { num++ }
     const updated = companies.map(c => c.id === req.params.id ? { ...c, invoiceCounter: num + 1 } : c)
     await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
     res.json({ number: `INV-${num}`, next: num + 1 })
