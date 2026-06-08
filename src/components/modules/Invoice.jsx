@@ -388,6 +388,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         customTax: '',
         advancePaid: 0,
         notes: fromQuotation.notes || '',
+        subject: fromQuotation.subject || '',
         stealthPrint: false,
         status: 'unpaid',
       }
@@ -407,6 +408,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
       customTax: '',
       advancePaid: 0,
       notes: '',
+      subject: '',
       stealthPrint: false,
       status: 'unpaid',
     }
@@ -523,6 +525,10 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           <div className="input-group">
             <label className="input-label">Contact</label>
             <input className="input" value={form.clientContact} onChange={e => setField('clientContact', e.target.value)} placeholder="+92..." />
+          </div>
+          <div className="input-group col-span-3">
+            <label className="input-label">Subject / Title <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(appears on PDF — e.g. "Books & Stationery Supply")</span></label>
+            <input className="input" value={form.subject || ''} onChange={e => setField('subject', e.target.value)} placeholder="e.g. Uniform Supply — Phase 1 / Books & Stationery..." />
           </div>
           <div className="input-group col-span-3">
             <label className="input-label">Client Address</label>
@@ -675,8 +681,9 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         </div>
 
         <div className="input-group" style={{ marginTop: 14 }}>
-          <label className="input-label">Notes</label>
-          <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />
+          <label className="input-label">📝 Notes / Terms <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(printed at bottom of PDF)</span></label>
+          <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={3} spellCheck
+            placeholder="e.g. Payment due within 30 days. Goods once sold are not returnable." />
         </div>
 
         <Attachments refId={initial?.id} refType="invoice" uploadedBy={currentUser?.name} />

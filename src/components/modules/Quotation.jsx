@@ -20,7 +20,7 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
     clientName: '', clientContact: '', clientAddress: '', clientId: '',
     date: new Date().toISOString().slice(0, 10),
     items: [EMPTY_ITEM()],
-    taxRate: 0, customTax: '', notes: '',
+    taxRate: 0, customTax: '', notes: '', subject: '',
     stealthPrint: false, status: 'draft',
   })
   const [expandedRows, setExpandedRows] = useState({})
@@ -79,12 +79,16 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
             <input type="date" className="input" value={form.date} onChange={e => setField('date', e.target.value)} />
           </div>
           <div className="input-group col-span-3">
+            <label className="input-label">Subject / Title <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(appears on PDF — e.g. "Books & Stationery Supply")</span></label>
+            <input className="input" placeholder="e.g. Uniform Supply — Phase 1 / Books & Stationery..." value={form.subject || ''} onChange={e => setField('subject', e.target.value)} />
+          </div>
+          <div className="input-group col-span-3">
             <label className="input-label">Client Address</label>
             <input className="input" placeholder="Client address (appears on PDF)" value={form.clientAddress || ''} onChange={e => setField('clientAddress', e.target.value)} />
           </div>
           <div className="input-group col-span-3">
-            <label className="input-label">Notes / Terms</label>
-            <textarea className="input" placeholder="Payment terms, delivery info..." value={form.notes} onChange={e => setField('notes', e.target.value)} spellCheck rows={2} />
+            <label className="input-label">📝 Notes / Terms <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(printed at bottom of PDF)</span></label>
+            <textarea className="input" placeholder="e.g. Payment due within 30 days. Goods once sold are not returnable." value={form.notes} onChange={e => setField('notes', e.target.value)} spellCheck rows={3} />
           </div>
         </div>
       </div>

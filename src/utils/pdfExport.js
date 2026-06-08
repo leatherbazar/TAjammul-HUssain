@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { fmtDate, todayFmt } from './fmt'
 
 // Company profiles — logo, address, tagline per company ID
 const COMPANY_PROFILES = {
@@ -146,7 +147,7 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(60, 60, 60)
   doc.text(`No: ${docNumber}`, pageW - 12, 20, { align: 'right' })
-  doc.text(`Date: ${date || new Date().toLocaleDateString()}`, pageW - 12, 28, { align: 'right' })
+  doc.text(`Date: ${fmtDate(date) || todayFmt()}`, pageW - 12, 28, { align: 'right' })
 
   // Divider
   doc.setDrawColor(180, 180, 180)
@@ -188,6 +189,14 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
   await addHeader(doc, 'QUOTATION', quotation.number || 'DRAFT', quotation.date, stealth, company)
 
   let y = 50
+
+  // Subject / Title row (if set)
+  if (quotation.subject) {
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(100, 30, 30)
+    doc.text(`Subject: ${quotation.subject}`, 14, y)
+    y += 8
+    doc.setTextColor(40, 40, 40)
+  }
 
   // Client info box
   doc.setFillColor(240, 240, 245)
@@ -258,11 +267,15 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
   }
 
   if (quotation.notes) {
-    const finalY = doc.lastAutoTable.finalY + 10
-    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
-    doc.text('Notes:', 14, finalY)
-    doc.setFont('helvetica', 'normal')
-    doc.text(quotation.notes, 14, finalY + 5)
+    const finalY = doc.lastAutoTable.finalY + 8
+    doc.setFillColor(248, 248, 252)
+    const noteLines = doc.splitTextToSize(quotation.notes, 178)
+    const noteH = noteLines.length * 5 + 10
+    doc.roundedRect(12, finalY, 186, noteH, 2, 2, 'F')
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(80, 80, 100)
+    doc.text('Notes / Terms:', 16, finalY + 5)
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40)
+    doc.text(noteLines, 16, finalY + 10)
   }
 
   addFooter(doc, company)
@@ -274,6 +287,15 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
   await addHeader(doc, 'INVOICE', invoice.number, invoice.date, stealth, company)
 
   let y = 50
+
+  // Subject / Title row (if set)
+  if (invoice.subject) {
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(100, 30, 30)
+    doc.text(`Subject: ${invoice.subject}`, 14, y)
+    y += 8
+    doc.setTextColor(40, 40, 40)
+  }
+
   doc.setFillColor(240, 240, 245)
   const iBoxH = [invoice.clientAddress, invoice.clientContact].filter(Boolean).length * 6 + 14
   doc.roundedRect(12, y, 186, iBoxH, 2, 2, 'F')
@@ -341,6 +363,18 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
     })
   }
 
+  if (invoice.notes) {
+    const noteY = doc.lastAutoTable.finalY + 8
+    doc.setFillColor(248, 248, 252)
+    const noteLines = doc.splitTextToSize(invoice.notes, 178)
+    const noteH = noteLines.length * 5 + 10
+    doc.roundedRect(12, noteY, 186, noteH, 2, 2, 'F')
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(80, 80, 100)
+    doc.text('Notes / Terms:', 16, noteY + 5)
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40)
+    doc.text(noteLines, 16, noteY + 10)
+  }
+
   addFooter(doc, company)
   doc.save(`Invoice-${invoice.number}.pdf`)
 }
@@ -389,7 +423,7 @@ export async function exportSupplyOrderPDF(order, company = null) {
 export async function exportDayBookPDF(entries, dateRange, company = null) {
   const doc = new jsPDF()
   const title = dateRange ? `DAY BOOK  (${dateRange})` : 'DAY BOOK'
-  await addHeader(doc, title, 'STATEMENT', new Date().toLocaleDateString(), false, company)
+  await addHeader(doc, title, 'STATEMENT', todayFmt(), false, company)
 
   const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
   const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
@@ -399,7 +433,7 @@ export async function exportDayBookPDF(entries, dateRange, company = null) {
     startY: 50,
     head: [['Date', 'Type', 'Description', 'Party', 'Reference', 'Wallet', 'Debit (Dr)', 'Credit (Cr)']],
     body: entries.map(e => [
-      e.date || '',
+      fmtDate(e.date),
       (e.type || '').replace(/-/g, ' '),
       e.description || '',
       e.partyName || '—',
@@ -435,7 +469,7 @@ export async function exportDayBookPDF(entries, dateRange, company = null) {
 export async function exportLedgerPDF(contact, entries, company = null) {
   const doc = new jsPDF()
   const label = contact.accountHeadID ? `${contact.accountHeadID}` : 'ACC'
-  await addHeader(doc, 'ACCOUNT STATEMENT', label, new Date().toLocaleDateString(), false, company)
+  await addHeader(doc, 'ACCOUNT STATEMENT', label, todayFmt(), false, company)
 
   let y = 50
   doc.setFillColor(240, 240, 245)
@@ -453,7 +487,7 @@ export async function exportLedgerPDF(contact, entries, company = null) {
     startY: y,
     head: [['Date', 'Description', 'Document Ref', 'Type', 'Debit (Dr)', 'Credit (Cr)', 'Balance']],
     body: entries.map(e => [
-      e.date || (e.createdAt || '').slice(0, 10) || '',
+      fmtDate(e.date || (e.createdAt || '').slice(0, 10)),
       e.description || '',
       e.documentRef  || '—',
       (e.documentType || 'manual'),
