@@ -14,6 +14,7 @@ function ItemForm({ initial, onSave, onCancel }) {
     minStock: 0, supplier: '',
   })
 
+  const [saving, setSaving] = useState(false)
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const totalQty = form.useMatrix ? calcMatrixTotal(form.matrixRows) : (parseInt(form.qty) || 0)
   const margin = form.sellPrice > 0 ? (((form.sellPrice - form.costPrice) / form.sellPrice) * 100).toFixed(1) : 0
@@ -115,10 +116,13 @@ function ItemForm({ initial, onSave, onCancel }) {
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-primary" onClick={() => {
+        <button className="btn btn-primary" disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}} onClick={async () => {
           if (!form.name) { toast.error('Item name required.'); return }
-          onSave({ ...form, qty: totalQty, sku: form.sku || `SKU-${Date.now().toString().slice(-6)}` })
-        }}>💾 Save Item</button>
+          setSaving(true)
+          try { await onSave({ ...form, qty: totalQty, sku: form.sku || `SKU-${Date.now().toString().slice(-6)}` }) }
+          catch (err) { toast.error(`Save failed: ${err.message || 'Check connection'}`) }
+          finally { setSaving(false) }
+        }}>{saving ? '⏳ Saving…' : '💾 Save Item'}</button>
       </div>
     </div>
   )

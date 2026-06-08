@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
@@ -23,9 +24,14 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
   const updateItem = (id, k, v) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, [k]: v } : i) }))
   const updateMatrix = (id, rows) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, matrixRows: rows } : i) }))
 
-  const handleSave = () => {
+  const [saving, setSaving] = useState(false)
+  const handleSave = async () => {
     if (!form.title) { toast.error('Title required.'); return }
-    onSave(form)
+    if (saving) return
+    setSaving(true)
+    try { await onSave(form) }
+    catch (err) { toast.error(`Save failed: ${err.message || 'Check connection'}`) }
+    finally { setSaving(false) }
   }
 
   return (
@@ -200,7 +206,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-primary" onClick={handleSave}>💾 Save Order</button>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{saving ? '⏳ Saving…' : '💾 Save Order'}</button>
       </div>
     </div>
   )
@@ -274,13 +280,15 @@ export default function SupplyOrders({ isEmployee = false }) {
   }, [data.supplyOrders, search, isEmployee, currentUser])
 
   const handleSave = async (f) => {
-    if (selected) { updateRecord('supplyOrders', selected.id, f); toast.success('Order updated!') }
-    else {
-      const num = await nextDocNumber('so')
-      addRecord('supplyOrders', { ...f, number: num })
-      toast.success('Supply order created!')
-    }
-    setView('list'); setSelected(null)
+    try {
+      if (selected) { updateRecord('supplyOrders', selected.id, f); toast.success('Order updated!') }
+      else {
+        const num = await nextDocNumber('so')
+        addRecord('supplyOrders', { ...f, number: num })
+        toast.success('Supply order created!')
+      }
+      setView('list'); setSelected(null)
+    } catch (err) { throw err }
   }
 
   const handleReceive = async (order, { date, notes }) => {

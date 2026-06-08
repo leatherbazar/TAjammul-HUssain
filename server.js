@@ -499,6 +499,16 @@ app.get('/api/ledger/:accountHeadID', async (req, res) => {
 // Manual ledger entry
 app.post('/api/ledger', async (req, res) => {
   try {
+    // Dedup guard: reject identical ledger entries posted within 5 seconds
+    const fiveSec = new Date(Date.now() - 5000)
+    const dupe = await Ledger.findOne({
+      accountHeadID: req.body.accountHeadID,
+      debit:         parseFloat(req.body.debit)  || 0,
+      credit:        parseFloat(req.body.credit) || 0,
+      description:   req.body.description,
+      createdAt:     { $gte: fiveSec },
+    }).lean()
+    if (dupe) return res.json(fmtLean(dupe))
     const entry = await postLedgerEntry(req.body)
     res.json(fmt(entry))
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -739,6 +749,11 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
 
 app.post('/api/dayBook', async (req, res) => {
   try {
+    // Idempotency: return existing record if same id already saved
+    if (req.body.id) {
+      const existing = await models.dayBook.findOne({ id: req.body.id }).lean()
+      if (existing) return res.json(fmtLean(existing))
+    }
     const doc = await models.dayBook.create(req.body)
 
     // ── LEDGER TRIGGER — fires whenever a party account is linked ─────────────
@@ -908,6 +923,10 @@ app.get('/api/data', async (req, res) => {
 // ── Supply Order — saved as procurement intent; ledger only posts on Purchase confirm ──
 app.post('/api/supplyOrders', async (req, res) => {
   try {
+    if (req.body.id) {
+      const existing = await models.supplyOrders.findOne({ id: req.body.id }).lean()
+      if (existing) return res.json(fmtLean(existing))
+    }
     const doc = await models.supplyOrders.create(req.body)
     res.json(fmt(doc))
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -1427,7 +1446,14 @@ app.get('/api/account-heads', async (req, res) => {
 
 OTHER_COLLECTIONS.filter(n => n !== 'dayBook' && n !== 'supplyOrders').forEach(name => {
   app.post(`/api/${name}`, async (req, res) => {
-    try { res.json(fmt(await models[name].create(req.body))) }
+    try {
+      // Idempotency: if client sends an id and a record with that id already exists, return it (don't double-save)
+      if (req.body.id) {
+        const existing = await models[name].findOne({ id: req.body.id }).lean()
+        if (existing) return res.json(fmtLean(existing))
+      }
+      res.json(fmt(await models[name].create(req.body)))
+    }
     catch (err) { res.status(500).json({ error: err.message }) }
   })
   app.put(`/api/${name}/:id`, async (req, res) => {

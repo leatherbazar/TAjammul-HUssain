@@ -174,6 +174,7 @@ function DayBook() {
     wallet: 'Cash', reference: '', category: '',
     partyName: '', accountHeadID: '',
   })
+  const [addingSaving, setAddingSaving] = useState(false)
   const [masterAction, setMasterAction] = useState(null)
   const [editEntry, setEditEntry] = useState(null)
   const [search, setSearch] = useState('')
@@ -197,6 +198,8 @@ function DayBook() {
   const handleAdd = async () => {
     if (!form.description) { toast.error('Description required.'); return }
     if (!form.debit && !form.credit) { toast.error('Enter debit or credit amount.'); return }
+    if (addingSaving) return  // prevent double-click
+    setAddingSaving(true)
     const entry = { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 }
     try {
       const res = await fetch('/api/dayBook', {
@@ -211,6 +214,8 @@ function DayBook() {
       toast.success('Entry added & ledger updated!')
     } catch {
       toast.error('Connection error.')
+    } finally {
+      setAddingSaving(false)
     }
   }
 
@@ -324,7 +329,7 @@ function DayBook() {
             <input type="number" className="input" min="0" value={form.credit} onChange={e => setField('credit', e.target.value)} placeholder="0.00" style={{ borderColor: form.credit ? 'var(--green)' : undefined }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button className="btn btn-primary w-full" onClick={handleAdd}>+ Add Entry</button>
+            <button className="btn btn-primary w-full" onClick={handleAdd} disabled={addingSaving} style={addingSaving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{addingSaving ? '⏳ Saving…' : '+ Add Entry'}</button>
           </div>
         </div>
       </div>

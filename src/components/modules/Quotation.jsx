@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import { calcExpr } from '../../utils/calcExpr'
@@ -23,6 +24,7 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
     stealthPrint: false, status: 'draft',
   })
   const [expandedRows, setExpandedRows] = useState({})
+  const [saving, setSaving] = useState(false)
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -39,9 +41,17 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
   const taxAmount = subtotal * effectiveTaxRate / 100
   const total = subtotal + taxAmount
 
-  const handleSave = (status, goToInvoice = false) => {
+  const handleSave = async (status, goToInvoice = false) => {
     if (!form.clientName) { toast.error('Client name is required.'); return }
-    onSave({ ...form, status, subtotal, taxAmount, total, taxRate: effectiveTaxRate }, goToInvoice)
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave({ ...form, status, subtotal, taxAmount, total, taxRate: effectiveTaxRate }, goToInvoice)
+    } catch (err) {
+      toast.error(`Save failed: ${err.message || 'Check connection'}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -203,10 +213,10 @@ function QuotationForm({ initial, onSave, onCancel, clients }) {
       <Attachments refId={initial?.id} refType="quotation" uploadedBy={currentUser?.name} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-secondary" onClick={() => handleSave('draft')}>💾 Save Draft</button>
-        <button className="btn btn-primary" onClick={() => handleSave('sent')}>📤 Send to Client</button>
-        <button className="btn btn-success" onClick={() => handleSave('approved', true)}>✅ Approve → Invoice</button>
+        <button className="btn btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button className="btn btn-secondary" onClick={() => handleSave('draft')} disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{saving ? '⏳ Saving…' : '💾 Save Draft'}</button>
+        <button className="btn btn-primary" onClick={() => handleSave('sent')} disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{saving ? '⏳ Saving…' : '📤 Send to Client'}</button>
+        <button className="btn btn-success" onClick={() => handleSave('approved', true)} disabled={saving} style={saving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{saving ? '⏳ Saving…' : '✅ Approve → Invoice'}</button>
       </div>
     </div>
   )
@@ -238,6 +248,7 @@ export default function Quotations() {
 
   const handleSave = async (formData, goToInvoice = false) => {
     let savedRecord
+    try {
     if (selected) {
       updateRecord('quotations', selected.id, formData)
       savedRecord = { ...selected, ...formData }
@@ -259,6 +270,7 @@ export default function Quotations() {
         toast('📋 Opening Invoice editor — all items are editable.', { duration: 4000 })
       }, 100)
     }
+    } catch (err) { throw err }
   }
 
   const requestDelete = (id) => setMasterAction({ type: 'delete', id })
