@@ -743,14 +743,15 @@ export default function Invoices() {
   }, [data.invoices, search, statusFilter])
 
   const handleSave = async (f) => {
+    const loadId = toast.loading('Saving invoice…')
     try {
-      const loadId = toast.loading('Saving invoice…')
       if (selected) {
-        await fetch(`/api/invoices/${selected.id}`, {
+        const r = await fetch(`/api/invoices/${selected.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(f),
-        }).then(r => { if (!r.ok) throw new Error('Server error') })
+        })
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Server error') }
         updateRecord('invoices', selected.id, f)
         toast.dismiss(loadId)
         toast.success(`Invoice ${f.number} updated!`)
@@ -776,7 +777,8 @@ export default function Invoices() {
       }
       setView('list'); setSelected(null); setFromQuotation(null)
     } catch (err) {
-      throw err  // re-throw so InvoiceForm.handleSave catch shows the toast
+      toast.dismiss(loadId)   // always clear the loading spinner
+      throw err               // re-throw so InvoiceForm.handleSave shows the error toast
     }
   }
 

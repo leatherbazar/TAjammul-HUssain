@@ -129,7 +129,7 @@ function ItemForm({ initial, onSave, onCancel }) {
 }
 
 export default function Inventory({ isEmployee = false }) {
-  const { data, addRecord, updateRecord, deleteRecord } = useApp()
+  const { data, addRecord, updateRecord, deleteRecord, refreshData } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
@@ -148,10 +148,33 @@ export default function Inventory({ isEmployee = false }) {
     return cats
   }, [data.inventory])
 
-  const handleSave = (f) => {
-    if (selected) { updateRecord('inventory', selected.id, f); toast.success('Item updated!') }
-    else { addRecord('inventory', f); toast.success('Item added to inventory!') }
-    setView('list'); setSelected(null)
+  const handleSave = async (f) => {
+    const loadId = toast.loading('Saving…')
+    try {
+      if (selected) {
+        const r = await fetch(`/api/inventory/${selected.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...f, updatedAt: new Date().toISOString() }),
+        })
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Server error') }
+        updateRecord('inventory', selected.id, f)
+      } else {
+        const r = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...f, id: Date.now().toString(), createdAt: new Date().toISOString() }),
+        })
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Server error') }
+        await refreshData()
+      }
+      toast.dismiss(loadId)
+      toast.success(selected ? 'Item updated!' : 'Item added to inventory!')
+      setView('list'); setSelected(null)
+    } catch (err) {
+      toast.dismiss(loadId)
+      throw err
+    }
   }
 
   const totalValue = useMemo(() => (data.inventory || []).reduce((s, i) => s + (i.qty || 0) * (i.costPrice || 0), 0), [data.inventory])
