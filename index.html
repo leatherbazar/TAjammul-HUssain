@@ -9071,10 +9071,10 @@ function CashBook() {
 
       {/* ── Real-Time Collection Heads ── */}
       {(() => {
-        const pays   = S.get(K.PAY,  []);
-        const exps   = S.get(K.EXP,  []);
-        const spays  = S.get(K.SPAY, []);
-        const vpays  = S.get(K.VPAY, []);
+        const pays   = S.get(K.PAY,  []).filter(isFromCutoff);
+        const exps   = S.get(K.EXP,  []).filter(e => isCBFromCutoff({date: e.date}));
+        const spays  = S.get(K.SPAY, []).filter(e => isCBFromCutoff({date: e.date}));
+        const vpays  = S.get(K.VPAY, []).filter(e => isCBFromCutoff({date: e.date}));
         // Income heads
         const feeCol  = pays.reduce((s,p) => s + Number(p.amount      || 0), 0);
         const afCol   = pays.reduce((s,p) => s + Number(p.annualFund   || 0), 0);
@@ -9092,7 +9092,7 @@ function CashBook() {
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-bold text-gray-700">📊 Real-Time Collection Summary</h3>
-              <span className="text-xs text-gray-400">(All-time from actual records)</span>
+              <span className="text-xs text-gray-400">(June 2026 onwards)</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Income */}
