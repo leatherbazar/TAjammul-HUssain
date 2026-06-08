@@ -108,7 +108,7 @@ export function AppProvider({ children }) {
   const update = (key, value) => {
     setData(prev => {
       if (key === 'masterCode') api('PUT', '/api/master-code', { masterCode: value })
-      else if (key === 'wallets') api('PUT', '/api/wallets', value)
+      else if (key === 'wallets') api('PUT', `/api/wallets?company=${currentCompanyId}`, value)
       else if (key === 'settings') api('PUT', '/api/settings', value)
       return { ...prev, [key]: value }
     })

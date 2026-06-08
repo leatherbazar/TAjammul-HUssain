@@ -280,13 +280,20 @@ mongoose.connection.once('open', async () => {
       { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '426- Ali Arcade, 13-km Main Multan Road, Lahore', phone: '+92(314)4094900', email: 'tataheertraders@gmail.com', active: true },
       { id: 'INF', name: 'Infinity Corp', invoiceCounter: 180, quotationPrefix: 'QUO', soPrefix: 'SO', dnPrefix: 'DN', address: '101- Choudery Plaza Royal Park Lahore', phone: '+92-314-855-5566', email: 'infinity.crop512@gmail.com', active: true },
     ]}}, { upsert: true })
-    // Force-update INF contact details (in case DB was already seeded with blank phone/email)
+    // Force-update INF contact details + backfill per-company wallets
     {
       const doc = await Singleton.findOne({ key: 'companies' }).lean()
       if (doc) {
-        const updated = (doc.value || []).map(c => c.id === 'INF'
-          ? { ...c, address: '101- Choudery Plaza Royal Park Lahore', phone: '+92-314-855-5566', email: 'infinity.crop512@gmail.com' }
-          : c)
+        const updated = (doc.value || []).map(c => ({
+          ...c,
+          // Ensure every company has its own wallets bucket
+          wallets: c.wallets || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 },
+          ...(c.id === 'INF' ? {
+            address: '101- Choudery Plaza Royal Park Lahore',
+            phone: '+92-314-855-5566',
+            email: 'infinity.crop512@gmail.com',
+          } : {}),
+        }))
         await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
       }
     }
@@ -779,15 +786,17 @@ app.get('/api/data', async (req, res) => {
       Singleton.findOne({ key: 'securitySettings' }).lean(),
       Singleton.findOne({ key: 'companies' }).lean(),
     ])
-    result.wallets          = walletDoc?.value   || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
     result.settings         = settingsDoc?.value || { invoiceCounter: 201, companyName: 'TATAHEER TRADERS' }
     result.securitySettings = secDoc?.value      || { sessionTimeout: 30, maxLoginAttempts: 5, lockDuration: 15, recoveryPin: '1234', backupCode: 'TAT-2026-RESET' }
     result.masterCode       = masterDoc?.value   || '5555'
     result.companies        = companiesDoc?.value || []
-    // Active company settings (for invoice counter, company name, etc.)
+    // Active company settings + per-company wallets
     const activeCompany = (companiesDoc?.value || []).find(c => c.id === cid)
     if (activeCompany) {
       result.settings = { ...result.settings, invoiceCounter: activeCompany.invoiceCounter, companyName: activeCompany.name }
+      result.wallets  = activeCompany.wallets || { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
+    } else {
+      result.wallets = { cash: 0, bank: 0, jazzcash: 0, easypaisa: 0 }
     }
 
     res.json(result)
@@ -1455,8 +1464,13 @@ app.post('/api/audit-log', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 app.put('/api/wallets', async (req, res) => {
-  try { await Singleton.findOneAndUpdate({ key: 'wallets' }, { value: req.body }, { upsert: true }); res.json(req.body) }
-  catch (err) { res.status(500).json({ error: err.message }) }
+  try {
+    const cid = req.query.company || 'TAT'
+    const doc = await Singleton.findOne({ key: 'companies' }).lean()
+    const updated = (doc?.value || []).map(c => c.id === cid ? { ...c, wallets: req.body } : c)
+    await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
+    res.json(req.body)
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 app.put('/api/settings', async (req, res) => {
   try { await Singleton.findOneAndUpdate({ key: 'settings' }, { value: req.body }, { upsert: true }); res.json(req.body) }

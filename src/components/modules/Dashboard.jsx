@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
+import { fmtDate } from '../../utils/fmt'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts'
 import toast from 'react-hot-toast'
 
@@ -200,10 +201,10 @@ export default function Dashboard() {
     // ── AR directly from invoices (most accurate — doesn't depend on ledger entries)
     const totalAR = invoiceOutstanding
 
-    // ── AP from supplier contacts (ledger-backed)
-    const totalAP = contacts
-      .filter(c => c.type === 'supplier')
-      .reduce((s, c) => s + Math.abs(c.currentBalance || 0), 0)
+    // ── AP from purchases (per-company — what we still owe suppliers)
+    const totalAP = purchases
+      .filter(p => p.paymentStatus !== 'paid')
+      .reduce((s, p) => s + Math.max((p.totalAmount || 0) - (p.paidAmount || 0), 0), 0)
 
     // ── Cash Position = DayBook net (income received − expenses paid)
     const dbIncome   = dayBook.filter(e => e.type === 'income' ).reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
