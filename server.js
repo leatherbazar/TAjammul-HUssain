@@ -33,6 +33,9 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.static(join(__dirname, 'dist')))
 
+// ─── HEALTH CHECK (Render uses this to confirm app is running) ────────────────
+app.get('/api/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }))
+
 // ─── CONNECT MONGODB ──────────────────────────────────────────────────────────
 mongoose.connect(process.env.DATABASE_URL)
   .then(() => console.log('✅ MongoDB Atlas connected'))
@@ -139,10 +142,12 @@ const StockMovement = mongoose.model('StockMovement', StockMovementSchema)
 const InvoiceSchema = new mongoose.Schema({
   id:            { type: String, index: true },
   number:        { type: String, unique: true, sparse: true },
-  accountHeadID: String,  // linked Contact accountHeadID
+  accountHeadID: String,
   clientName:    String,
   clientContact: String,
   date:          String,
+  dueDate:       String,
+  subject:       String,
   items:         mongoose.Schema.Types.Mixed,
   subtotal:      Number,
   taxRate:       Number,
@@ -150,9 +155,28 @@ const InvoiceSchema = new mongoose.Schema({
   total:         Number,
   advancePaid:   Number,
   balance:       Number,
-  status:        String,
+  status:        String,   // draft|sent|partial|paid|cancelled
   notes:         String,
   stealth:       Boolean,
+  companyId:     String,
+  // ── WHT (Withholding Tax) ──────────────────────────────────────────────────
+  whtEnabled:    { type: Boolean, default: false },
+  whtScenario:   { type: String, enum: ['none', 'scenario-a', 'scenario-b'], default: 'none' },
+  whtRate:       { type: Number, default: 0 },   // e.g. 4.5 or 10
+  whtAmount:     { type: Number, default: 0 },   // computed: total * whtRate/100
+  whtNetAmount:  { type: Number, default: 0 },   // scenario-b: total - whtAmount
+  whtStatus:     { type: String, enum: ['na', 'pending-deposit', 'deposited'], default: 'na' },
+  whtChallanRef: String,  // FBR challan number once deposited (scenario-a)
+  whtDepositDate: String,
+  // ── Maker-Checker audit trail ──────────────────────────────────────────────
+  createdBy:       mongoose.Schema.Types.Mixed,  // { name, role, userId }
+  approvedBy:      mongoose.Schema.Types.Mixed,  // { name, role, userId }
+  approvalStatus:  { type: String, enum: ['draft', 'pending', 'approved', 'rejected'], default: 'approved' },
+  approvedAt:      String,
+  rejectionReason: String,
+  // ── Quotation reference (optional — never required) ────────────────────────
+  quotationRef:    String,  // source QUO number if converted
+  salesOrderRef:   String,  // optional SO reference
 }, { strict: false, timestamps: true })
 
 const Invoice = mongoose.model('Invoice', InvoiceSchema)
@@ -235,16 +259,32 @@ async function generateAccountHeadID(type) {
 }
 
 // ── Ledger trigger: create entry + update contact balance ─────────────────────
-async function postLedgerEntry({ accountHeadID, contactName, date, description, documentRef, documentType, debit, credit }) {
+// approvalStatus: 'approved' (default, posts to live balance) | 'pending' (stored but
+// excluded from running balance until an approver confirms it via PUT /api/ledger/:id/approve)
+async function postLedgerEntry({
+  accountHeadID, contactName, date, description, documentRef, documentType,
+  debit, credit,
+  createdBy   = null,   // { name, role } — operator who initiated
+  approvedBy  = null,   // { name, role } — manager who approved; null = unapproved
+  approvalStatus = 'approved', // 'approved' | 'pending'
+  whtScenario = null,   // 'none' | 'scenario-a' | 'scenario-b'
+  whtRate     = 0,
+  whtAmount   = 0,
+}) {
   if (!accountHeadID) return
 
-  // Get last balance for this account
-  const lastEntry = await Ledger.findOne({ accountHeadID }).sort({ createdAt: -1 }).lean()
+  // ── Only approved entries affect the running balance ──────────────────────
+  const affects = (approvalStatus === 'approved')
+
+  const lastEntry = affects
+    ? await Ledger.findOne({ accountHeadID, approvalStatus: 'approved' }).sort({ createdAt: -1 }).lean()
+    : await Ledger.findOne({ accountHeadID, approvalStatus: 'approved' }).sort({ createdAt: -1 }).lean()
+
   const prevBalance = lastEntry?.balance || 0
-  const newBalance = prevBalance + debit - credit
+  const newBalance  = affects ? (prevBalance + debit - credit) : prevBalance // pending = no balance impact
 
   const entry = await Ledger.create({
-    id: Date.now().toString(),
+    id: Date.now().toString() + Math.floor(Math.random() * 1000),
     accountHeadID,
     contactName,
     date: date || new Date().toISOString().slice(0, 10),
@@ -254,13 +294,24 @@ async function postLedgerEntry({ accountHeadID, contactName, date, description, 
     debit,
     credit,
     balance: newBalance,
+    // ── Audit trail ──────────────────────────────────────────────────────────
+    createdBy,
+    approvedBy,
+    approvalStatus,
+    approvedAt: approvalStatus === 'approved' && approvedBy ? new Date().toISOString() : null,
+    // ── WHT metadata ─────────────────────────────────────────────────────────
+    whtScenario,
+    whtRate,
+    whtAmount,
   })
 
-  // Update contact's currentBalance
-  await Contact.findOneAndUpdate(
-    { accountHeadID },
-    { $set: { currentBalance: newBalance } }
-  )
+  // Only update the contact's live balance for approved entries
+  if (affects) {
+    await Contact.findOneAndUpdate(
+      { accountHeadID },
+      { $set: { currentBalance: newBalance } }
+    )
+  }
 
   return entry
 }
@@ -593,22 +644,29 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
   try {
+    // ── Idempotency: if client re-posts same id (double-click / retry) ────────
+    if (req.body.id) {
+      const existing = await Invoice.findOne({ id: req.body.id }).lean()
+      if (existing) return res.json(fmtLean(existing))
+    }
+
     // ── Sanitise invoice number ───────────────────────────────────────────────
-    // Guard against "[object Promise]" or blank numbers saved by old client bug.
-    // If number is bad, auto-generate a safe unique one before inserting.
+    // Guards against: "[object Promise]", blank, null, undefined — all caused
+    // by the old async race where number hadn't resolved before save.
     let safeNumber = req.body.number
     const isBad = !safeNumber
       || String(safeNumber).includes('[object')
       || String(safeNumber).trim() === ''
+      || String(safeNumber) === 'undefined'
+      || String(safeNumber) === 'null'
+
     if (isBad) {
-      // Find the highest existing INV-xxx by numeric value
       const all = await Invoice.find({ number: /^INV-\d+$/ }, { number: 1 }).lean()
       const lastNum = all.reduce((max, inv) => {
-        const n = parseInt(inv.number.replace('INV-', '')) || 0
+        const n = parseInt((inv.number || '').replace('INV-', '')) || 0
         return Math.max(max, n)
       }, 200)
       safeNumber = `INV-${lastNum + 1}`
-      // Also bump the company counter so next auto-number is consistent
       const cid = req.body.companyId || 'TAT'
       const cDoc = await Singleton.findOne({ key: 'companies' }).lean()
       if (cDoc) {
@@ -618,24 +676,53 @@ app.post('/api/invoices', async (req, res) => {
         await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
       }
     }
-    const invoice = await Invoice.create({ ...req.body, number: safeNumber })
+
+    // ── Compute WHT fields ────────────────────────────────────────────────────
+    const grossTotal   = parseFloat(req.body.total) || 0
+    const whtEnabled   = !!req.body.whtEnabled
+    const whtScenario  = whtEnabled ? (req.body.whtScenario || 'none') : 'none'
+    const whtRate      = whtEnabled ? (parseFloat(req.body.whtRate) || 0) : 0
+    const whtAmount    = whtEnabled ? +(grossTotal * whtRate / 100).toFixed(2) : 0
+    const whtNetAmount = whtEnabled && whtScenario === 'scenario-b' ? +(grossTotal - whtAmount).toFixed(2) : grossTotal
+    const whtStatus    = whtEnabled && whtScenario === 'scenario-a' ? 'pending-deposit' : 'na'
+
+    // ── Audit: createdBy from request header or body ──────────────────────────
+    const createdBy = req.body.createdBy || null
+
+    const invoice = await Invoice.create({
+      ...req.body,
+      number:      safeNumber,
+      whtEnabled,  whtScenario, whtRate, whtAmount, whtNetAmount, whtStatus,
+      createdBy,
+      approvedBy:      req.body.approvedBy      || null,
+      approvalStatus:  req.body.approvalStatus  || 'approved',
+    })
 
     // ── LEDGER TRIGGER ────────────────────────────────────────────────────────
-    if (req.body.accountHeadID && req.body.total > 0) {
+    // Only post if the invoice is approved (maker-checker) and has a party account
+    const shouldPost = (invoice.approvalStatus === 'approved') && invoice.accountHeadID && grossTotal > 0
+    if (shouldPost) {
       await postLedgerEntry({
-        accountHeadID: req.body.accountHeadID,
-        contactName:   req.body.clientName,
-        date:          req.body.date,
-        description:   `Invoice: ${req.body.number || ''}`,
-        documentRef:   req.body.number,
-        documentType:  'invoice',
-        debit:         parseFloat(req.body.total) || 0, // client owes us
-        credit:        0,
+        accountHeadID:  invoice.accountHeadID,
+        contactName:    invoice.clientName,
+        date:           invoice.date,
+        description:    `Invoice raised: ${safeNumber}`,
+        documentRef:    safeNumber,
+        documentType:   'invoice',
+        debit:          grossTotal,  // client now owes us the full gross amount
+        credit:         0,
+        createdBy,
+        approvedBy:     invoice.approvedBy,
+        approvalStatus: invoice.approvalStatus,
+        whtScenario,    whtRate,     whtAmount,
       })
     }
 
     res.json(fmt(invoice))
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) {
+    console.error('Invoice POST error:', err)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.put('/api/invoices/:id', async (req, res) => {
@@ -647,6 +734,244 @@ app.put('/api/invoices/:id', async (req, res) => {
     ).lean()
     if (!invoice) return res.status(404).json({ error: 'Not found' })
     res.json(fmtLean(invoice))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── MAKER-CHECKER: Approve an invoice (posts ledger if not already posted) ────
+app.post('/api/invoices/:id/approve', async (req, res) => {
+  try {
+    const { approvedBy, rejectionReason, action = 'approve' } = req.body
+    // action: 'approve' | 'reject'
+    const invoice = await Invoice.findOne({ id: req.params.id }).lean()
+    if (!invoice) return res.status(404).json({ error: 'Not found' })
+    if (invoice.approvalStatus === 'approved') return res.status(400).json({ error: 'Already approved.' })
+
+    const newStatus = action === 'reject' ? 'rejected' : 'approved'
+    const updated   = await Invoice.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: {
+          approvalStatus:  newStatus,
+          approvedBy:      approvedBy || null,
+          approvedAt:      new Date().toISOString(),
+          rejectionReason: rejectionReason || null,
+      }},
+      { new: true }
+    ).lean()
+
+    // Post to ledger NOW (was held back while pending)
+    if (newStatus === 'approved' && invoice.accountHeadID && (invoice.total > 0)) {
+      await postLedgerEntry({
+        accountHeadID:  invoice.accountHeadID,
+        contactName:    invoice.clientName,
+        date:           invoice.date,
+        description:    `Invoice approved: ${invoice.number}`,
+        documentRef:    invoice.number,
+        documentType:   'invoice',
+        debit:          parseFloat(invoice.total) || 0,
+        credit:         0,
+        createdBy:      invoice.createdBy,
+        approvedBy,
+        approvalStatus: 'approved',
+        whtScenario:    invoice.whtScenario,
+        whtRate:        invoice.whtRate,
+        whtAmount:      invoice.whtAmount,
+      })
+    }
+
+    res.json({ ok: true, invoice: fmtLean(updated) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── LEDGER: Approve a pending ledger entry ────────────────────────────────────
+app.post('/api/ledger/:id/approve', async (req, res) => {
+  try {
+    const { approvedBy } = req.body
+    const entry = await Ledger.findOne({ id: req.params.id }).lean()
+    if (!entry) return res.status(404).json({ error: 'Not found' })
+    if (entry.approvalStatus === 'approved') return res.status(400).json({ error: 'Already approved.' })
+
+    // Recompute running balance — the entry was skipped before
+    const lastApproved = await Ledger.findOne({ accountHeadID: entry.accountHeadID, approvalStatus: 'approved' })
+      .sort({ createdAt: -1 }).lean()
+    const prevBal   = lastApproved?.balance || 0
+    const newBalance = prevBal + (entry.debit || 0) - (entry.credit || 0)
+
+    const updated = await Ledger.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { approvalStatus: 'approved', approvedBy, approvedAt: new Date().toISOString(), balance: newBalance } },
+      { new: true }
+    ).lean()
+
+    // Rebase all subsequent entries for this account (they shift by this entry's delta)
+    const delta = newBalance - (entry.balance || 0)
+    if (delta !== 0) {
+      await Ledger.updateMany(
+        { accountHeadID: entry.accountHeadID, createdAt: { $gt: entry.createdAt }, approvalStatus: 'approved' },
+        { $inc: { balance: delta } }
+      )
+      await Contact.findOneAndUpdate({ accountHeadID: entry.accountHeadID }, { $inc: { currentBalance: delta } })
+    }
+
+    res.json({ ok: true, entry: fmtLean(updated) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── WHT: Record payment against invoice — handles BOTH scenarios ──────────────
+//  Scenario A: full amount received now; wht deposited later via separate call
+//  Scenario B: client deducts wht, pays net; we post WHT Receivable separately
+app.post('/api/invoices/:id/payment', async (req, res) => {
+  try {
+    const { amount, wallet, date, notes, whtScenario: overrideScenario, createdBy } = req.body
+    const paid = parseFloat(amount) || 0
+    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+
+    const invoice = await Invoice.findOne({ id: req.params.id }).lean()
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' })
+
+    const scenario   = overrideScenario || invoice.whtScenario || 'none'
+    const whtAmt     = parseFloat(invoice.whtAmount) || 0
+    const grossTotal = parseFloat(invoice.total)     || 0
+    const prevPaid   = parseFloat(invoice.advancePaid) || 0
+
+    // ── What the ledger receives depends on WHT scenario ─────────────────────
+    let cashReceived  = paid   // actual money hitting our bank/cash
+    let arCredited    = paid   // how much AR we close (= gross for scenario-b)
+
+    if (scenario === 'scenario-b' && whtAmt > 0) {
+      // Client paid NET (deducted WHT at source)
+      // They send us: grossTotal - whtAmt
+      cashReceived = paid              // net received
+      arCredited   = paid + whtAmt    // close full gross AR (net + WHT deducted at source)
+    }
+    // Scenario A: cashReceived === paid === gross (WHT posted later via /wht-deposit)
+
+    const newPaid   = prevPaid + arCredited
+    const newBal    = Math.max(grossTotal - newPaid, 0)
+    const newStatus = newBal <= 0 ? 'paid' : 'partial'
+
+    await Invoice.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { advancePaid: newPaid, balance: newBal, status: newStatus } },
+      { new: true }
+    )
+
+    const payDate = date || new Date().toISOString().slice(0, 10)
+
+    if (invoice.accountHeadID) {
+      if (scenario === 'scenario-b' && whtAmt > 0) {
+        // ── Scenario B: THREE-LINE posting ────────────────────────────────────
+        // 1. Dr Cash/Bank (net cash received)
+        await postLedgerEntry({
+          accountHeadID: 'CASH-WALLET',  // system wallet account
+          contactName:   `${wallet || 'Cash'} Wallet`,
+          date: payDate, description: `Net payment received: ${invoice.number} (WHT deducted at source)`,
+          documentRef: invoice.number, documentType: 'payment',
+          debit: cashReceived, credit: 0, createdBy,
+        })
+        // 2. Dr WHT Receivable (tax deducted by client — we can claim against FBR)
+        await postLedgerEntry({
+          accountHeadID: 'WHT-RECEIVABLE',
+          contactName:   'WHT Receivable / Advance Income Tax',
+          date: payDate, description: `WHT deducted by ${invoice.clientName} on ${invoice.number} @ ${invoice.whtRate}%`,
+          documentRef: invoice.number, documentType: 'payment',
+          debit: whtAmt, credit: 0, createdBy,
+          whtScenario: 'scenario-b', whtRate: invoice.whtRate, whtAmount: whtAmt,
+        })
+        // 3. Cr Accounts Receivable (FULL gross — clears the AR balance)
+        await postLedgerEntry({
+          accountHeadID: invoice.accountHeadID,
+          contactName:   invoice.clientName,
+          date: payDate, description: `AR cleared (gross): ${invoice.number} — Scenario B WHT`,
+          documentRef: invoice.number, documentType: 'payment',
+          debit: 0, credit: arCredited, createdBy,
+          whtScenario: 'scenario-b', whtRate: invoice.whtRate, whtAmount: whtAmt,
+        })
+      } else {
+        // ── Scenario A or No-WHT: standard single credit on AR ────────────────
+        await postLedgerEntry({
+          accountHeadID: invoice.accountHeadID,
+          contactName:   invoice.clientName,
+          date: payDate, description: `Payment received: ${invoice.number} from ${invoice.clientName || ''}`,
+          documentRef: invoice.number, documentType: 'payment',
+          debit: 0, credit: cashReceived, createdBy,
+          whtScenario: scenario, whtRate: invoice.whtRate || 0, whtAmount: 0,
+        })
+      }
+    }
+
+    // ── DayBook entry ─────────────────────────────────────────────────────────
+    await models.dayBook.create({
+      id: Date.now().toString(),
+      date: payDate, type: 'income', category: 'Client Payment',
+      description: `Payment received: ${invoice.number} from ${invoice.clientName || 'Client'}`,
+      partyName: invoice.clientName || '',
+      accountHeadID: invoice.accountHeadID || '',
+      reference: invoice.number,
+      debit:  cashReceived, credit: 0,
+      wallet: wallet || 'Cash',
+      whtScenario: scenario, whtAmount: scenario === 'scenario-b' ? whtAmt : 0,
+      notes: notes || '',
+      createdAt: new Date().toISOString(),
+      companyId: invoice.companyId,
+    })
+
+    res.json({ ok: true, newStatus, newPaid, newBal, cashReceived, arCredited, whtAmt })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── WHT Scenario A: Deposit WHT to FBR — post clearing entries ───────────────
+app.post('/api/invoices/:id/wht-deposit', async (req, res) => {
+  try {
+    const { challanRef, depositDate, wallet, depositAmount, approvedBy, createdBy } = req.body
+    const invoice = await Invoice.findOne({ id: req.params.id }).lean()
+    if (!invoice) return res.status(404).json({ error: 'Not found' })
+    if (invoice.whtScenario !== 'scenario-a') return res.status(400).json({ error: 'Invoice is not Scenario A WHT.' })
+    if (invoice.whtStatus === 'deposited') return res.status(400).json({ error: 'WHT already deposited.' })
+
+    const whtAmt  = parseFloat(depositAmount || invoice.whtAmount) || 0
+    const depDate = depositDate || new Date().toISOString().slice(0, 10)
+
+    // Scenario A deposit: two-step clearing
+    // 1. Dr WHT Clearance Asset (we temporarily hold the tax on behalf of client)
+    await postLedgerEntry({
+      accountHeadID: 'WHT-CLEARANCE',
+      contactName:   'WHT Clearance Asset',
+      date: depDate,
+      description:   `WHT deposit to FBR: challan ${challanRef || 'N/A'} for ${invoice.number}`,
+      documentRef:   challanRef || invoice.number,
+      documentType:  'manual',
+      debit:  whtAmt, credit: 0,
+      createdBy, approvedBy, approvalStatus: 'approved',
+      whtScenario: 'scenario-a', whtRate: invoice.whtRate, whtAmount: whtAmt,
+    })
+    // 2. Cr Cash/Bank (cash leaves our account to FBR)
+    await postLedgerEntry({
+      accountHeadID: 'CASH-WALLET',
+      contactName:   `${wallet || 'Bank'} Wallet`,
+      date: depDate,
+      description:   `WHT paid to FBR from ${wallet || 'Bank'}: ${invoice.number}`,
+      documentRef:   challanRef || invoice.number,
+      documentType:  'manual',
+      debit:  0, credit: whtAmt,
+      createdBy, approvedBy, approvalStatus: 'approved',
+      whtScenario: 'scenario-a', whtRate: invoice.whtRate, whtAmount: whtAmt,
+    })
+
+    await Invoice.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { whtStatus: 'deposited', whtChallanRef: challanRef, whtDepositDate: depDate } }
+    )
+
+    // DayBook expense entry
+    await models.dayBook.create({
+      id: Date.now().toString(),
+      date: depDate, type: 'expense', category: 'WHT Deposit to FBR',
+      description: `WHT deposited to FBR — challan: ${challanRef || 'N/A'} for ${invoice.number}`,
+      reference: challanRef || invoice.number, debit: 0, credit: whtAmt,
+      wallet: wallet || 'Bank', companyId: invoice.companyId, createdAt: new Date().toISOString(),
+    })
+
+    res.json({ ok: true, whtAmt, challanRef, depDate })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -687,61 +1012,7 @@ app.post('/api/invoices/fix-bad-numbers', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// ── Record payment against an invoice (marks paid/partial + ledger + dayBook) ─
-app.post('/api/invoices/:id/payment', async (req, res) => {
-  try {
-    const { amount, wallet, date, notes } = req.body
-    const paid = parseFloat(amount) || 0
-    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
-
-    const invoice = await Invoice.findOne({ id: req.params.id }).lean()
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' })
-
-    const prevPaid    = parseFloat(invoice.advancePaid) || 0
-    const total       = parseFloat(invoice.total) || 0
-    const newPaid     = prevPaid + paid
-    const newBalance  = total - newPaid
-    const newStatus   = newBalance <= 0 ? 'paid' : 'partial'
-
-    const updated = await Invoice.findOneAndUpdate(
-      { id: req.params.id },
-      { $set: { advancePaid: newPaid, balance: Math.max(newBalance, 0), status: newStatus } },
-      { new: true }
-    ).lean()
-
-    // ── Ledger credit entry (client paid us) ──────────────────────────────────
-    if (invoice.accountHeadID) {
-      await postLedgerEntry({
-        accountHeadID: invoice.accountHeadID,
-        contactName:   invoice.clientName,
-        date:          date || new Date().toISOString().slice(0, 10),
-        description:   `Payment received for ${invoice.number}`,
-        documentRef:   invoice.number,
-        documentType:  'payment',
-        debit:         0,
-        credit:        paid,
-      })
-    }
-
-    // ── DayBook entry (income received) ───────────────────────────────────────
-    await models.dayBook.create({
-      id:          Date.now().toString(),
-      date:        date || new Date().toISOString().slice(0, 10),
-      type:        'income',
-      category:    'Client Payment',
-      description: `Payment received: ${invoice.number} from ${invoice.clientName || 'Client'}`,
-      partyName:   invoice.clientName || '',
-      accountHeadID: invoice.accountHeadID || '',
-      reference:   invoice.number,
-      debit:       paid,
-      credit:      0,
-      wallet:      wallet || 'Cash',
-      notes:       notes || '',
-    })
-
-    res.json({ ok: true, invoice: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
+// (payment endpoint now lives above — see app.post('/api/invoices/:id/payment') )
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DAYBOOK  (with auto ledger trigger for payments)
@@ -757,32 +1028,31 @@ app.post('/api/dayBook', async (req, res) => {
     const doc = await models.dayBook.create(req.body)
 
     // ── LEDGER TRIGGER — fires whenever a party account is linked ─────────────
+    const type = (req.body.type || '').toLowerCase()
+    const cat  = (req.body.category || '').toLowerCase()
     if (req.body.accountHeadID) {
       const debit  = parseFloat(req.body.debit)  || 0
       const credit = parseFloat(req.body.credit) || 0
       if (debit > 0 || credit > 0) {
         // ── Direction logic ───────────────────────────────────────────────────
-        // DayBook "income" = money coming IN (debit in DayBook)
+        // DayBook "income" = money coming IN
         //   → on client ledger this is a CREDIT (they paid us, AR reduces)
-        // DayBook "expense" = money going OUT (credit in DayBook)
-        //   → on supplier ledger this is a DEBIT (we paid them, AP reduces)
+        // DayBook "expense" / "advance-given" = money going OUT
+        //   → on supplier/payee ledger this is a DEBIT (AP reduces)
+        // "advance-received" = received from client
+        //   → CREDIT on their ledger
         // For manual entries with no type, pass through as-is.
         let ledgerDebit  = debit
         let ledgerCredit = credit
-        const type = (req.body.type || '').toLowerCase()
-        const cat  = (req.body.category || '').toLowerCase()
-        if (type === 'income' && cat !== 'sale') {
-          // Payment received from client → credit on their account
+        if (type === 'income' || type === 'advance-received') {
           ledgerDebit  = 0
           ledgerCredit = debit || credit
-        } else if (type === 'expense' && cat !== 'purchase') {
-          // Payment made to supplier → debit on their account
+        } else if (type === 'expense' || type === 'advance-given') {
           ledgerDebit  = credit || debit
           ledgerCredit = 0
         }
         // 'sale' and 'purchase' auto-entries are handled by their own endpoints
-        // and should not double-post here — skip them
-        if (cat !== 'sale' && cat !== 'purchase' && cat !== 'client payment') {
+        if (cat !== 'sale' && cat !== 'purchase') {
           await postLedgerEntry({
             accountHeadID: req.body.accountHeadID,
             contactName:   req.body.partyName || req.body.description,
@@ -793,6 +1063,31 @@ app.post('/api/dayBook', async (req, res) => {
             debit:  ledgerDebit,
             credit: ledgerCredit,
           })
+        }
+      }
+    }
+
+    // ── INVOICE STATUS AUTO-UPDATE when a client payment is recorded ──────────
+    // If category = 'Client Payment' / 'client payment' and reference matches an invoice
+    if ((cat === 'client payment' || type === 'income') && req.body.reference) {
+      const ref = (req.body.reference || '').trim()
+      const invoice = await models.invoices.findOne({ number: ref }).lean()
+      if (invoice) {
+        const paymentAmt = parseFloat(req.body.debit) || parseFloat(req.body.credit) || 0
+        const prevPaid   = parseFloat(invoice.advancePaid) || 0
+        const total      = parseFloat(invoice.total) || parseFloat(invoice.grandTotal) || 0
+        const newPaid    = prevPaid + paymentAmt
+        let newStatus    = invoice.status
+        if (newPaid >= total) {
+          newStatus = 'paid'
+        } else if (newPaid > 0) {
+          newStatus = 'partial'
+        }
+        if (newStatus !== invoice.status || newPaid !== prevPaid) {
+          await models.invoices.updateOne(
+            { number: ref },
+            { $set: { advancePaid: newPaid, status: newStatus } }
+          )
         }
       }
     }
@@ -1181,7 +1476,30 @@ app.post('/api/purchases', async (req, res) => {
       wallet:      'Accounts Payable',
     })
 
-    res.json(fmt(purchase))
+    // ── Compute vendor total outstanding (all unpaid bills for this supplier) ──
+    let vendorBalance = 0
+    if (req.body.accountHeadID) {
+      const allVendorBills = await Purchase.find({ accountHeadID: req.body.accountHeadID }).lean()
+      vendorBalance = allVendorBills.reduce((s, p) => {
+        const bal = (parseFloat(p.totalAmount) || 0) - (parseFloat(p.paidAmount) || 0)
+        return s + Math.max(bal, 0)
+      }, 0)
+    }
+
+    res.json({ ...fmt(purchase), vendorBalance })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Vendor outstanding balance ────────────────────────────────────────────────
+app.get('/api/purchases/vendor-balance/:accountHeadID', async (req, res) => {
+  try {
+    const bills = await Purchase.find({ accountHeadID: req.params.accountHeadID }).lean()
+    const totalOwed = bills.reduce((s, p) => {
+      return s + Math.max((parseFloat(p.totalAmount) || 0) - (parseFloat(p.paidAmount) || 0), 0)
+    }, 0)
+    const totalBilled = bills.reduce((s, p) => s + (parseFloat(p.totalAmount) || 0), 0)
+    const totalPaid   = bills.reduce((s, p) => s + (parseFloat(p.paidAmount)   || 0), 0)
+    res.json({ totalOwed, totalBilled, totalPaid, billCount: bills.length })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -1238,7 +1556,17 @@ app.post('/api/purchases/:id/payment', async (req, res) => {
       companyId:   purchase.companyId || 'TAT',
     })
 
-    res.json({ ok: true, purchase: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
+    // ── Compute vendor total outstanding across ALL their bills after this payment ──
+    let vendorTotalOutstanding = 0
+    if (purchase.accountHeadID) {
+      const allVendorBills = await Purchase.find({ accountHeadID: purchase.accountHeadID }).lean()
+      vendorTotalOutstanding = allVendorBills.reduce((s, p) => {
+        if (p.id === purchase.id) return s + Math.max(newBalance, 0)
+        return s + Math.max((parseFloat(p.totalAmount) || 0) - (parseFloat(p.paidAmount) || 0), 0)
+      }, 0)
+    }
+
+    res.json({ ok: true, purchase: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus, vendorTotalOutstanding })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

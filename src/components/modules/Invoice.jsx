@@ -454,9 +454,12 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
     const qty = i.useMatrix ? calcMatrixTotal(i.matrixRows) : (parseInt(i.qty) || 0)
     return s + qty * (parseFloat(i.unitPrice) || 0)
   }, 0)
-  const taxAmount = subtotal * effectiveTax / 100
-  const total = subtotal + taxAmount
-  const balance = total - (parseFloat(form.advancePaid) || 0)
+  const taxAmount  = subtotal * effectiveTax / 100
+  const total      = subtotal + taxAmount
+  const whtRate    = parseFloat(form.whtRate) || 0
+  const whtAmount  = form.whtEnabled ? +(total * whtRate / 100).toFixed(2) : 0
+  const whtNet     = form.whtScenario === 'scenario-b' ? +(total - whtAmount).toFixed(2) : total
+  const balance    = total - (parseFloat(form.advancePaid) || 0)
 
   const [saving, setSaving] = useState(false)
 
@@ -470,7 +473,20 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
     try {
       const num = form.number || await nextInvoiceNumber()
       if (!num) throw new Error('Could not generate invoice number')
-      await onSave({ ...form, number: num, subtotal, taxAmount, total, taxRate: effectiveTax })
+      const payload = {
+        ...form,
+        number:     num,
+        subtotal,   taxAmount, total, taxRate: effectiveTax,
+        whtEnabled: !!form.whtEnabled,
+        whtScenario: form.whtEnabled ? (form.whtScenario || 'none') : 'none',
+        whtRate:    form.whtEnabled ? whtRate : 0,
+        whtAmount:  form.whtEnabled ? whtAmount : 0,
+        whtNetAmount: form.whtEnabled ? whtNet : total,
+        whtStatus:  form.whtEnabled && form.whtScenario === 'scenario-a' ? 'pending-deposit' : 'na',
+        createdBy:  currentUser ? { name: currentUser.name, role: currentUser.role } : null,
+        quotationRef: form.quotationRef || (fromQuotation?.number) || '',
+      }
+      await onSave(payload)
     } catch (err) {
       toast.error(`Save failed: ${err.message || 'Check your connection'}`)
     } finally {
@@ -658,6 +674,84 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
                 </div>
               ))}
             </div>
+
+            {/* ── WHT Panel ───────────────────────────────────────────────── */}
+            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: form.whtEnabled ? 10 : 0 }}>
+                <input type="checkbox" id="wht-enabled" checked={!!form.whtEnabled}
+                  onChange={e => setForm(f => ({ ...f, whtEnabled: e.target.checked, whtScenario: e.target.checked ? 'scenario-b' : 'none', whtRate: e.target.checked ? (f.whtRate || 4.5) : 0 }))} />
+                <label htmlFor="wht-enabled" style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', cursor: 'pointer' }}>
+                  🏛️ Withholding Tax (WHT / Advance Tax)
+                </label>
+              </div>
+              {form.whtEnabled && (
+                <>
+                  {/* Scenario selector */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                    {[
+                      { key: 'scenario-b', label: 'A — Client Deducts at Source', hint: 'Client pays net; we claim WHT from FBR' },
+                      { key: 'scenario-a', label: 'B — We Deposit Later',          hint: 'We receive full amount, deposit WHT to FBR later' },
+                    ].map(s => (
+                      <button key={s.key} onClick={() => setField('whtScenario', s.key)}
+                        style={{ flex: 1, minWidth: 120, padding: '6px 10px', borderRadius: 7, cursor: 'pointer', textAlign: 'left', fontSize: 11, fontWeight: 700,
+                          border: `2px solid ${form.whtScenario === s.key ? 'var(--amber)' : 'var(--glass-border)'}`,
+                          background: form.whtScenario === s.key ? 'rgba(245,158,11,0.15)' : 'transparent',
+                          color: form.whtScenario === s.key ? 'var(--amber)' : 'var(--text-muted)' }}>
+                        {s.label}
+                        <div style={{ fontWeight: 400, fontSize: 10, marginTop: 2, color: 'var(--text-muted)' }}>{s.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {/* WHT Rate */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                    <div className="input-label" style={{ width: 80, margin: 0 }}>WHT Rate %</div>
+                    <input type="number" className="input" min="0" max="30" step="0.5" value={form.whtRate || ''}
+                      onChange={e => setField('whtRate', e.target.value)}
+                      style={{ width: 80, textAlign: 'center', borderColor: 'var(--amber)' }} />
+                    {[4.5, 7, 10, 12].map(r => (
+                      <button key={r} onClick={() => setField('whtRate', r)}
+                        style={{ padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          border: `1px solid ${form.whtRate == r ? 'var(--amber)' : 'var(--glass-border)'}`,
+                          background: form.whtRate == r ? 'rgba(245,158,11,0.2)' : 'transparent',
+                          color: form.whtRate == r ? 'var(--amber)' : 'var(--text-muted)' }}>{r}%</button>
+                    ))}
+                  </div>
+                  {/* WHT Summary */}
+                  <div style={{ borderTop: '1px dashed rgba(245,158,11,0.4)', paddingTop: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Gross Invoice Total</span>
+                      <span>PKR {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--red)', marginBottom: 3 }}>
+                      <span>WHT @ {whtRate}% {form.whtScenario === 'scenario-b' ? '(deducted by client)' : '(we deposit later)'}</span>
+                      <span>- PKR {whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {form.whtScenario === 'scenario-b' && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: 14, color: 'var(--blue)', borderTop: '1px solid rgba(245,158,11,0.4)', paddingTop: 6 }}>
+                        <span>Net Amount Client Pays</span>
+                        <span>PKR {whtNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {form.whtScenario === 'scenario-a' && (
+                      <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>
+                        ℹ️ Client pays full PKR {total.toLocaleString()}. You will deposit PKR {whtAmount.toLocaleString()} to FBR and issue them a challan.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Approval Status Badge (Maker-Checker) */}
+            {form.approvalStatus && form.approvalStatus !== 'approved' && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                background: form.approvalStatus === 'rejected' ? 'rgba(220,38,38,0.1)' : 'rgba(59,130,246,0.1)',
+                border: `1px solid ${form.approvalStatus === 'rejected' ? 'rgba(220,38,38,0.4)' : 'rgba(59,130,246,0.4)'}`,
+                fontSize: 12 }}>
+                {form.approvalStatus === 'pending' && '🕐 Pending Manager Approval — Ledger not yet updated'}
+                {form.approvalStatus === 'rejected' && `❌ Rejected${form.rejectionReason ? `: ${form.rejectionReason}` : ''}`}
+              </div>
+            )}
 
             <div className="divider" />
             <div className="input-group" style={{ marginBottom: 8 }}>

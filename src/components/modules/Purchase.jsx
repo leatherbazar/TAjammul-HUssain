@@ -105,7 +105,7 @@ function PurchaseForm({ initial, onSave, onCancel, currentUser }) {
                   </datalist>
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Cost Price (PKR)</label>
+                  <label className="input-label">Unit Rate (PKR) — Bill Amount</label>
                   <input type="number" className="input" min="0" value={item.costPrice}
                     onChange={e => updateItem(item.id, 'costPrice', e.target.value)} />
                 </div>
@@ -202,7 +202,7 @@ function ConvertSOModal({ order, onConfirm, onCancel }) {
         </div>
 
         <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', fontSize: 12, color: 'var(--amber)' }}>
-          ⚠️ This will: <strong>add items to Inventory</strong> · <strong>create a Purchase record</strong> · <strong>post PKR {totalAmount.toLocaleString()} to Supplier Ledger (AP)</strong>
+          ⚠️ Saving this bill will: <strong>add items to Inventory</strong> · <strong>increase Vendor Payable by PKR {totalAmount.toLocaleString()}</strong> (Bill Amount Payable Increased)
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
@@ -216,21 +216,115 @@ function ConvertSOModal({ order, onConfirm, onCancel }) {
   )
 }
 
+// ─── Bill Saved Smart Pop-up ──────────────────────────────────────────────────
+function BillSavedModal({ purchase, vendorBalance, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}>
+      <div style={{ background: 'linear-gradient(145deg,#071a0a 0%,#050f06 100%)', borderRadius: 20, padding: 32, maxWidth: 440, width: '100%', border: '1px solid rgba(34,197,94,0.35)', boxShadow: '0 0 60px rgba(34,197,94,0.12), 0 32px 64px rgba(0,0,0,0.95)', textAlign: 'center' }}>
+        <div style={{ fontSize: 60, marginBottom: 10, lineHeight: 1 }}>✅</div>
+        <h3 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 900, color: '#4ade80' }}>Bill Saved Successfully!</h3>
+        <p style={{ margin: '0 0 22px', fontSize: 13, color: 'var(--text-muted)' }}>{purchase.number} · {purchase.supplierName}</p>
+
+        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Bill Amount — Payable Increased</div>
+          <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--amber)', fontFamily: 'Orbitron, monospace' }}>
+            PKR {Number(purchase.totalAmount || 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Credited (Cr) to Vendor's Ledger · Inventory Stock Updated</div>
+        </div>
+
+        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', marginBottom: 24 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Current Total Payable to {purchase.supplierName}</div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--red)', fontFamily: 'Orbitron, monospace' }}>
+            PKR {Number(vendorBalance || 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Total outstanding across all bills for this vendor</div>
+        </div>
+
+        <button className="btn btn-primary" style={{ width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 700 }} onClick={onClose}>
+          Got It ✓
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Payment Confirmed Smart Pop-up ──────────────────────────────────────────
+function PaymentConfirmModal({ supplierName, amountPaid, newBalance, vendorTotalOutstanding, onClose }) {
+  const fullySettled = newBalance <= 0.01
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}>
+      <div style={{ background: 'linear-gradient(145deg,#07070f 0%,#050510 100%)', borderRadius: 20, padding: 32, maxWidth: 440, width: '100%', border: '1px solid rgba(99,102,241,0.35)', boxShadow: '0 0 60px rgba(99,102,241,0.12), 0 32px 64px rgba(0,0,0,0.95)', textAlign: 'center' }}>
+        <div style={{ fontSize: 60, marginBottom: 10, lineHeight: 1 }}>💳</div>
+        <h3 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 900, color: '#818cf8' }}>Payment Processed!</h3>
+        <p style={{ margin: '0 0 22px', fontSize: 13, color: 'var(--text-muted)' }}>Supplier: {supplierName}</p>
+
+        <div style={{ padding: '14px 18px', borderRadius: 12, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.22)', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Amount Paid — Payable Reduced</div>
+          <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--green)', fontFamily: 'Orbitron, monospace' }}>
+            PKR {Number(amountPaid).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Debited (Dr) from Vendor's Ledger · Cash/Bank Reduced</div>
+        </div>
+
+        <div style={{ padding: '14px 18px', borderRadius: 12, background: fullySettled ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${fullySettled ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)'}`, marginBottom: 14 }}>
+          {fullySettled
+            ? <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--green)' }}>✅ This Bill Fully Settled!</div>
+            : <>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Remaining on This Bill</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--red)', fontFamily: 'Orbitron, monospace' }}>
+                  PKR {Number(newBalance).toLocaleString()}
+                </div>
+              </>
+          }
+        </div>
+
+        {vendorTotalOutstanding > 0.01 && (
+          <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)', marginBottom: 20, fontSize: 13 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Vendor Total Outstanding: </span>
+            <strong style={{ color: 'var(--amber)' }}>PKR {Number(vendorTotalOutstanding).toLocaleString()}</strong>
+          </div>
+        )}
+        {vendorTotalOutstanding <= 0.01 && (
+          <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)', marginBottom: 20, fontSize: 13, color: 'var(--green)', fontWeight: 700 }}>
+            🎉 All Bills for This Vendor Are Fully Paid!
+          </div>
+        )}
+
+        <button className="btn btn-primary" style={{ width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 700 }} onClick={onClose}>
+          Got It ✓
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Pay Supplier Modal ───────────────────────────────────────────────────────
 const WALLETS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa']
 
 function PaySupplierModal({ purchase, onClose, onSuccess }) {
-  const balance = (purchase.totalAmount || 0) - (purchase.paidAmount || 0)
-  const [amount, setAmount]   = useState(String(balance))
+  const billBalance = (purchase.totalAmount || 0) - (purchase.paidAmount || 0)
+  const [amount, setAmount]   = useState(String(billBalance))
   const [wallet, setWallet]   = useState('Cash')
   const [date, setDate]       = useState(new Date().toISOString().slice(0, 10))
   const [notes, setNotes]     = useState('')
   const [saving, setSaving]   = useState(false)
+  const [vendorOutstanding, setVendorOutstanding] = useState(null)
+
+  // Fetch vendor total outstanding on mount
+  useEffect(() => {
+    if (purchase.accountHeadID) {
+      fetch(`/api/purchases/vendor-balance/${encodeURIComponent(purchase.accountHeadID)}`)
+        .then(r => r.json())
+        .then(d => setVendorOutstanding(d.totalOwed || 0))
+        .catch(() => {})
+    }
+  }, [purchase.accountHeadID])
 
   const handlePay = async () => {
     const amt = parseFloat(amount)
     if (!amt || amt <= 0) { toast.error('Enter a valid amount.'); return }
-    if (amt > balance + 0.01) { toast.error(`Amount exceeds balance PKR ${balance.toLocaleString()}`); return }
+    if (amt > billBalance + 0.01) { toast.error(`Amount exceeds bill balance PKR ${billBalance.toLocaleString()}`); return }
     setSaving(true)
     try {
       const res = await fetch(`/api/purchases/${purchase.id}/payment`, {
@@ -240,32 +334,51 @@ function PaySupplierModal({ purchase, onClose, onSuccess }) {
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error || 'Payment failed'); return }
-      toast.success(`PKR ${amt.toLocaleString()} paid to ${purchase.supplierName}! ${data.status === 'paid' ? '✅ Fully settled' : '⏳ Partial'}`)
-      onSuccess()
+      onSuccess({ amountPaid: amt, newBalance: data.newBalance, vendorTotalOutstanding: data.vendorTotalOutstanding, status: data.status })
     } catch { toast.error('Network error') }
     finally { setSaving(false) }
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-title">💳 Pay Supplier — {purchase.number}</div>
+      <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">💳 Pay Vendor — {purchase.number}</div>
 
-        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Supplier: <strong style={{ color: 'var(--text)' }}>{purchase.supplierName}</strong></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-            <span>Total: <strong>PKR {Number(purchase.totalAmount || 0).toLocaleString()}</strong></span>
-            <span>Already Paid: <strong style={{ color: 'var(--green)' }}>PKR {Number(purchase.paidAmount || 0).toLocaleString()}</strong></span>
-            <span>Balance: <strong style={{ color: 'var(--red)' }}>PKR {Number(balance).toLocaleString()}</strong></span>
+        {/* Vendor balance summary */}
+        <div style={{ padding: '12px 16px', borderRadius: 10, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+            Vendor: <strong style={{ color: 'var(--text)' }}>{purchase.supplierName}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, fontSize: 12 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: 'var(--text-muted)' }}>This Bill Total</div>
+              <div style={{ fontWeight: 800, color: 'var(--text)' }}>PKR {Number(purchase.totalAmount || 0).toLocaleString()}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: 'var(--text-muted)' }}>Already Paid</div>
+              <div style={{ fontWeight: 800, color: 'var(--green)' }}>PKR {Number(purchase.paidAmount || 0).toLocaleString()}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: 'var(--text-muted)' }}>This Bill Due</div>
+              <div style={{ fontWeight: 800, color: 'var(--red)' }}>PKR {Number(billBalance).toLocaleString()}</div>
+            </div>
           </div>
         </div>
 
+        {/* Vendor total outstanding across all bills */}
+        {vendorOutstanding !== null && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 16, fontSize: 12 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Total Outstanding (All Bills): </span>
+            <strong style={{ color: 'var(--red)', fontSize: 14 }}>PKR {Number(vendorOutstanding).toLocaleString()}</strong>
+          </div>
+        )}
+
         <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
           <div className="input-group">
-            <label className="input-label">Amount Paying (PKR) *</label>
-            <input className="input" type="number" min="1" max={balance}
+            <label className="input-label">Amount Paid (Payable Reduced) *</label>
+            <input className="input" type="number" min="1" max={billBalance}
               value={amount} onChange={e => setAmount(e.target.value)}
-              style={{ fontWeight: 800, fontSize: 18, color: 'var(--amber)' }} />
+              style={{ fontWeight: 800, fontSize: 18, color: 'var(--green)' }} />
           </div>
           <div className="input-group">
             <label className="input-label">Payment Date</label>
@@ -274,7 +387,7 @@ function PaySupplierModal({ purchase, onClose, onSuccess }) {
         </div>
 
         <div className="input-group" style={{ marginBottom: 14 }}>
-          <label className="input-label">Paid From Wallet</label>
+          <label className="input-label">Paid From</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {WALLETS.map(w => (
               <button key={w}
@@ -306,8 +419,10 @@ export default function Purchases() {
   const { data, addRecord, updateRecord, deleteRecord, refreshData, currentUser } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
-  const [convertModal, setConvertModal] = useState(null) // supply order to convert
-  const [payModal, setPayModal] = useState(null)         // supplier payment
+  const [convertModal, setConvertModal] = useState(null)   // supply order to convert
+  const [payModal, setPayModal] = useState(null)           // supplier payment
+  const [billSavedData, setBillSavedData] = useState(null) // post-save smart popup
+  const [payConfirmData, setPayConfirmData] = useState(null) // post-payment smart popup
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('purchases') // 'purchases' | 'supply-orders'
@@ -342,9 +457,10 @@ export default function Purchases() {
       })
       const result = await res.json()
       if (!res.ok) { toast.error(result.error || 'Save failed'); return }
-      toast.success(`Purchase ${result.number} saved! Inventory updated.`)
       await refreshData()
       setView('list')
+      // Show smart bill-saved popup
+      setBillSavedData({ purchase: result, vendorBalance: result.vendorBalance || 0 })
     } catch (err) {
       toast.error('Network error — check server')
     }
@@ -522,7 +638,12 @@ export default function Purchases() {
         <PaySupplierModal
           purchase={payModal}
           onClose={() => setPayModal(null)}
-          onSuccess={async () => { setPayModal(null); await refreshData() }}
+          onSuccess={async ({ amountPaid, newBalance, vendorTotalOutstanding, status }) => {
+            const supplierName = payModal.supplierName
+            setPayModal(null)
+            await refreshData()
+            setPayConfirmData({ supplierName, amountPaid, newBalance, vendorTotalOutstanding, status })
+          }}
         />
       )}
 
@@ -550,6 +671,26 @@ export default function Purchases() {
             setMasterAction(null)
           }}
           onCancel={() => setMasterAction(null)}
+        />
+      )}
+
+      {/* Smart Bill Saved Pop-up */}
+      {billSavedData && (
+        <BillSavedModal
+          purchase={billSavedData.purchase}
+          vendorBalance={billSavedData.vendorBalance}
+          onClose={() => setBillSavedData(null)}
+        />
+      )}
+
+      {/* Smart Payment Confirmed Pop-up */}
+      {payConfirmData && (
+        <PaymentConfirmModal
+          supplierName={payConfirmData.supplierName}
+          amountPaid={payConfirmData.amountPaid}
+          newBalance={payConfirmData.newBalance}
+          vendorTotalOutstanding={payConfirmData.vendorTotalOutstanding}
+          onClose={() => setPayConfirmData(null)}
         />
       )}
     </div>

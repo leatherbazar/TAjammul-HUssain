@@ -2,14 +2,25 @@ services:
   - type: web
     name: tataheer-erp
     runtime: node
+    region: singapore          # closest to Pakistan
+    plan: free
     buildCommand: npm install && npm run build
     startCommand: node server.js
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "20"
       - key: DATABASE_URL
-        sync: false # Set this manually in Render dashboard
+        sync: false            # paste your MongoDB Atlas URI in Render dashboard
       - key: ADMIN_USER
-        sync: false
+        sync: false            # e.g. admin
       - key: ADMIN_PASSWORD
+        sync: false            # e.g. your_secure_password
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false            # optional — only needed for attachments
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
         sync: false

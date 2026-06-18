@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.log
 .env
+.env.*
+invoices_temp.json
+generate-blueprint.cjs
+TET-ERP-Blueprint-2026.docx
