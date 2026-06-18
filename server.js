@@ -2263,5 +2263,12 @@ app.get('*', (req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'))
 })
 
-const PORT = process.env.PORT || 5000
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Tataheer ERP server running on port ${PORT}`))
+// ── Export app for Firebase Cloud Functions ───────────────────────────────────
+export { app }
+
+// Only start HTTP server when run directly (node server.js)
+// When imported by Firebase Functions, process.argv[1] !== __filename
+if (process.argv[1] === __filename) {
+  const PORT = process.env.PORT || 5000
+  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Tataheer ERP server running on port ${PORT}`))
+}

@@ -7,3 +7,8 @@ dist/
 invoices_temp.json
 generate-blueprint.cjs
 TET-ERP-Blueprint-2026.docx
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

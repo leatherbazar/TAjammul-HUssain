@@ -3,13 +3,17 @@
   "private": true,
   "version": "2026.1.0",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "dev": "vite",
     "server": "node server.js",
     "dev:full": "concurrently --names \"API,UI\" --prefix-colors \"yellow,cyan\" \"node server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "npm run build && firebase deploy",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",
@@ -21,6 +25,8 @@
     "docx": "^9.7.1",
     "dotenv": "^17.4.2",
     "express": "^4.18.3",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.6.0",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "mongoose": "^8.2.1",
