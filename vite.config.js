@@ -32,6 +32,6 @@ export default defineConfig({
   },
   preview: {
     port: 4173,
-    allowedHosts: ['tat-bbc9.onrender.com', 'localhost']
+    allowedHosts: ['tat-bbc9.onrender.com', 'localhost', '.vercel.app', '.web.app']
   }
 })
