@@ -177,13 +177,18 @@ export function AppProvider({ children }) {
   const nextInvoiceNumber = async () => {
     try {
       const res = await api('POST', `/api/companies/${currentCompanyId}/next-invoice`)
+      // IMPORTANT: check res.ok — if server returns 404/500, res.json() would
+      // return an error object and json.number would be undefined (silent bug)
+      if (!res || !res.ok) throw new Error('Invoice number API unavailable')
       const json = await res.json()
+      if (!json.number) throw new Error('Server returned no invoice number')
       // Update local counter too
       setData(prev => ({ ...prev, settings: { ...prev.settings, invoiceCounter: json.next } }))
       return json.number
     } catch (err) {
-      // Fallback to local counter
-      const num = data.settings.invoiceCounter
+      // Fallback to local counter (always works, even when server is down)
+      console.warn('nextInvoiceNumber fallback:', err.message)
+      const num = data.settings?.invoiceCounter || 201
       updateNested('settings', 'invoiceCounter', num + 1)
       return `INV-${num}`
     }

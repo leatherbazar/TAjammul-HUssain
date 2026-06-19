@@ -2026,12 +2026,29 @@ app.put('/api/companies/:id', async (req, res) => {
 app.post('/api/companies/:id/next-invoice', async (req, res) => {
   try {
     const doc = await Singleton.findOne({ key: 'companies' }).lean()
-    const companies = doc?.value || []
-    const company = companies.find(c => c.id === req.params.id)
-    if (!company) return res.status(404).json({ error: 'Company not found' })
-    // Skip any numbers that already exist in the database (safety against duplicates)
-    let num = company.invoiceCounter || 201
-    while (await Invoice.exists({ number: `INV-${num}` })) { num++ }
+    let companies = doc?.value || []
+    let company = companies.find(c => c.id === req.params.id)
+
+    // Auto-create company entry if it doesn't exist (prevents 404 on first run)
+    if (!company) {
+      const DEFAULTS = {
+        TAT: { id: 'TAT', name: 'Tataheer Traders', invoiceCounter: 201 },
+        INF: { id: 'INF', name: 'Infinity Corp',    invoiceCounter: 180 },
+      }
+      company = DEFAULTS[req.params.id] || { id: req.params.id, name: req.params.id, invoiceCounter: 201 }
+      companies = [...companies, company]
+      await Singleton.findOneAndUpdate({ key: 'companies' }, { value: companies }, { upsert: true })
+    }
+
+    // Always move FORWARD — never fill gaps (gap-filling causes out-of-sequence numbers)
+    // Use max of: stored counter OR (highest existing invoice num + 1)
+    const allNums = await Invoice.find({ number: /^INV-\d+$/ }, { number: 1 }).lean()
+    const highestExisting = allNums.reduce((max, inv) => {
+      const n = parseInt((inv.number || '').replace('INV-', '')) || 0
+      return Math.max(max, n)
+    }, 0)
+    let num = Math.max(company.invoiceCounter || 201, highestExisting + 1)
+
     const updated = companies.map(c => c.id === req.params.id ? { ...c, invoiceCounter: num + 1 } : c)
     await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated }, { upsert: true })
     res.json({ number: `INV-${num}`, next: num + 1 })
