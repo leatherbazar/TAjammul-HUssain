@@ -15,6 +15,6 @@ export default defineConfig({
     }
   },
   preview: {
-    allowedHosts: ['tat-bbc9.onrender.com']
+    allowedHosts: ['localhost', '.vercel.app']
   }
 })
