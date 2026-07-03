@@ -3,9 +3,15 @@
   "configurations": [
     {
       "name": "tataheer-erp",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "3000", "--host"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "tataheer-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "server"],
+      "port": 5000
     }
   ]
 }

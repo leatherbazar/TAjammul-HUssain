@@ -16,8 +16,12 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
-  const [showReg, setShowReg]   = useState(false)
-  const [regForm, setRegForm]   = useState({ name: '', username: '', password: '', company: '', phone: '' })
+  const [showReg, setShowReg]         = useState(false)
+  const [regForm, setRegForm]         = useState({ name: '', username: '', password: '', company: '', phone: '' })
+  const [showForgot, setShowForgot]   = useState(false)
+  const [forgotUser, setForgotUser]   = useState('')
+  const [forgotResult, setForgotResult] = useState(null)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -45,6 +49,29 @@ export default function Login() {
       toast.error('Connection error. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault()
+    setForgotLoading(true)
+    setForgotResult(null)
+    try {
+      const res = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: forgotUser })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setForgotResult({ error: data.error })
+      } else {
+        setForgotResult({ password: data.password, name: data.name, role: data.role })
+      }
+    } catch {
+      setForgotResult({ error: 'Connection error. Please try again.' })
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -145,6 +172,16 @@ export default function Login() {
                 {loading ? ' Verifying...' : 'Sign In'}
               </button>
 
+              <div style={{ textAlign: 'center', marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowForgot(true); setForgotUser(username); setForgotResult(null) }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
               {portal === 'client' && (
                 <div style={{ textAlign: 'center', marginTop: 14 }}>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowReg(true)}>
@@ -191,6 +228,51 @@ export default function Login() {
           Tataheer Business Group © 2026 — Secure ERP Platform
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgot && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass" style={{ padding: 28, width: '90%', maxWidth: 360 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 18, textAlign: 'center' }}>🔑 Forgot Password</h3>
+            <form onSubmit={handleForgotPassword}>
+              <div className="input-group" style={{ marginBottom: 16 }}>
+                <label className="input-label">Username</label>
+                <input
+                  className="input"
+                  placeholder="Enter your username"
+                  value={forgotUser}
+                  onChange={e => { setForgotUser(e.target.value); setForgotResult(null) }}
+                  required
+                  autoFocus
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }} disabled={forgotLoading}>
+                {forgotLoading ? 'Searching...' : 'Get Password'}
+              </button>
+            </form>
+
+            {forgotResult && (
+              forgotResult.error
+                ? <div style={{ color: 'var(--red)', textAlign: 'center', fontSize: 13, marginBottom: 10 }}>{forgotResult.error}</div>
+                : <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '12px 16px', marginBottom: 10, textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Account found — {forgotResult.name}</div>
+                    <div style={{ fontSize: 13 }}>Your password is:</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: 'var(--red)', margin: '6px 0' }}>{forgotResult.password}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>Role: {forgotResult.role}</div>
+                  </div>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => { setShowForgot(false); setForgotResult(null); setForgotUser('') }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

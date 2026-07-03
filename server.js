@@ -1211,6 +1211,16 @@ app.put('/api/users/admin', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { username } = req.body
+    if (!username) return res.status(400).json({ error: 'Username is required.' })
+    const user = await User.findOne({ username }).lean()
+    if (!user) return res.status(404).json({ error: 'No account found with that username.' })
+    res.json({ password: user.password, name: user.name, role: user.role })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SINGLETONS
 // ═══════════════════════════════════════════════════════════════════════════════
