@@ -437,10 +437,8 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
   const { data, nextInvoiceNumber, currentCompany, currentUser } = useApp()
   const [form, setForm] = useState(() => {
     if (fromQuotation) {
-      // Keep same numeric part: QT-030 → INV-030
-      const matchedNum = fromQuotation.number?.replace(/^QT-/i, 'INV-') || ''
       return {
-        number: matchedNum,
+        number: '',
         quotationRef: fromQuotation.number,
         quotationId: fromQuotation.id,
         accountHeadID: fromQuotation.accountHeadID || '',
