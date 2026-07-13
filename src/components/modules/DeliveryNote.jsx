@@ -266,7 +266,19 @@ export default function DeliveryNotes() {
                 <td style={{ fontSize: 12 }}>{n.date}</td>
                 <td>{(n.items || []).length}</td>
                 <td style={{ fontSize: 12 }}>{n.driverName || '—'}</td>
-                <td><span className={`badge badge-${n.status === 'delivered' ? 'approved' : n.status === 'returned' ? 'cancelled' : 'pending'}`}>{n.status}</span></td>
+                <td>
+                  <select
+                    className="input"
+                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 110, cursor: 'pointer' }}
+                    value={n.status}
+                    onChange={e => {
+                      updateRecord('deliveryNotes', n.id, { ...n, status: e.target.value })
+                      toast.success(`Status → ${e.target.value}`)
+                    }}
+                  >
+                    {['pending', 'dispatched', 'delivered', 'returned'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => setMasterAction({ type: 'edit', item: n })}>✏️</button>

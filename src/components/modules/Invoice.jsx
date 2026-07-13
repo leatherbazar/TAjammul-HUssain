@@ -864,17 +864,8 @@ export default function Invoices() {
     }
   }
 
-  const handleGenerateDN = (dnData) => {
-    // Smart numbering: DN-201/1, DN-201/2 per invoice
-    let num
-    if (dnData.invoiceRef) {
-      const existing = (data.deliveryNotes || []).filter(n => n.invoiceRef === dnData.invoiceRef)
-      const part = existing.length + 1
-      const invSuffix = dnData.invoiceRef.replace(/^[A-Za-z]+-/, '') // "INV-201" → "201"
-      num = `DN-${invSuffix}/${part}`
-    } else {
-      num = `DN-${Date.now().toString().slice(-5)}`
-    }
+  const handleGenerateDN = async (dnData) => {
+    const num = await nextDocNumber('dn')
     addRecord('deliveryNotes', { ...dnData, number: num })
     toast.success(`Delivery Note ${num} created!`)
     setDnModal(null)
