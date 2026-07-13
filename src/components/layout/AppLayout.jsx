@@ -296,7 +296,7 @@ function Sidebar({ navItems, location, onNavigate, sidebarOpen, onClose, user, o
                     <div>2. Or tap <strong>3 dots menu (⋮)</strong></div>
                     <div>3. Tap <strong>"Install App"</strong> or <strong>"Add to Home Screen"</strong></div>
                     <div style={{ marginTop: 10, padding: '8px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', fontSize: 12 }}>
-                      💡 Make sure you're on <strong>tat-bbc9.onrender.com</strong> (HTTPS)
+                      💡 Make sure you're on <strong>tat-erp-2026.vercel.app</strong> (HTTPS)
                     </div>
                   </div>
                 )}
