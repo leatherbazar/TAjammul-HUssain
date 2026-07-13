@@ -86,40 +86,44 @@ function PurchaseForm({ initial, onSave, onCancel, currentUser }) {
                     onChange={e => updateItem(item.id, 'description', e.target.value)}
                     placeholder="Item name / description" spellCheck />
                 </div>
-                <div className="input-group">
-                  <label className="input-label">Color</label>
-                  <input className="input" value={item.color}
-                    onChange={e => updateItem(item.id, 'color', e.target.value)} placeholder="Black, Red…" />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Qty</label>
-                  <input type="number" className="input" min="1" value={item.qty}
-                    onChange={e => updateItem(item.id, 'qty', e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Unit</label>
-                  <input className="input" list="unit-list-p" value={item.unit}
-                    onChange={e => updateItem(item.id, 'unit', e.target.value)} placeholder="pcs, sqt…" />
-                  <datalist id="unit-list-p">
-                    {['pcs', 'sqt', 'meters', 'kg', 'pairs', 'sets', 'dozen', 'yards', 'rolls', 'boxes'].map(u => <option key={u} value={u} />)}
-                  </datalist>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Cost Price (PKR)</label>
-                  <input type="number" className="input" min="0" value={item.costPrice}
-                    onChange={e => updateItem(item.id, 'costPrice', e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Amount</label>
-                  <div style={{ padding: '9px 12px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)' }}>
-                    PKR {amount.toLocaleString()}
+                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div style={{ flex: '0 0 80px' }}>
+                      <label className="input-label">Color</label>
+                      <input className="input" value={item.color}
+                        onChange={e => updateItem(item.id, 'color', e.target.value)} placeholder="Black…" />
+                    </div>
+                    <div style={{ flex: '0 0 80px' }}>
+                      <label className="input-label">Qty</label>
+                      <input type="number" className="input" min="1" value={item.qty}
+                        onChange={e => updateItem(item.id, 'qty', e.target.value)} />
+                    </div>
+                    <div style={{ flex: '0 0 100px' }}>
+                      <label className="input-label">Unit</label>
+                      <input className="input" list="unit-list-p" value={item.unit}
+                        onChange={e => updateItem(item.id, 'unit', e.target.value)} placeholder="pcs…" />
+                      <datalist id="unit-list-p">
+                        {['pcs', 'sqt', 'meters', 'kg', 'pairs', 'sets', 'dozen', 'yards', 'rolls', 'boxes'].map(u => <option key={u} value={u} />)}
+                      </datalist>
+                    </div>
+                    <div style={{ flex: '1 1 130px' }}>
+                      <label className="input-label">Cost Price (PKR)</label>
+                      <input type="number" className="input" min="0" value={item.costPrice}
+                        onChange={e => updateItem(item.id, 'costPrice', e.target.value)} />
+                    </div>
+                    <div style={{ flex: '0 0 110px' }}>
+                      <label className="input-label">Amount</label>
+                      <div style={{ padding: '9px 12px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap' }}>
+                        PKR {amount.toLocaleString()}
+                      </div>
+                    </div>
+                    {form.items.length > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>✕ Remove</button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                {form.items.length > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                    <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>✕ Remove</button>
-                  </div>
-                )}
               </div>
             </div>
           )

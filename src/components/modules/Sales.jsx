@@ -297,9 +297,9 @@ function SaleForm({ initial, onSave, onCancel }) {
       {/* Payment & Totals */}
       <div className="section-box">
         <div className="section-title">💰 Payment Summary</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
           {/* Left: totals breakdown */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ flex: '1 1 220px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[
               { label: 'Subtotal', value: subtotal, color: 'var(--text)' },
               { label: `Tax (${form.taxRate || 0}%)`, value: taxAmount, color: 'var(--text-muted)' },
@@ -317,7 +317,7 @@ function SaleForm({ initial, onSave, onCancel }) {
           </div>
 
           {/* Right: payment input */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ flex: '1 1 220px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="input-group">
               <label className="input-label">Amount Received (PKR)</label>
               <input type="number" className="input" min="0" value={form.paidAmount}

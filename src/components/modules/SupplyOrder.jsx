@@ -118,47 +118,44 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                   <input className="input" value={item.description} onChange={e => updateItem(item.id, 'description', e.target.value)}
                     placeholder="Item description" spellCheck />
                 </div>
-                <div className="input-group">
-                  <label className="input-label">
-                    Qty {item.useMatrix && qty > 0 ? '(auto from matrix)' : ''}
-                  </label>
-                  <input
-                    type="number"
-                    className="input"
-                    min="0"
-                    value={item.useMatrix && qty > 0 ? qty : item.qty}
-                    onChange={e => updateItem(item.id, 'qty', e.target.value)}
-                    disabled={item.useMatrix && qty > 0}
-                    style={{ borderColor: item.useMatrix && qty > 0 ? 'var(--amber)' : undefined }}
-                    placeholder="Enter qty"
-                  />
-                  {item.useMatrix && qty === 0 && (
-                    <span style={{ fontSize: 11, color: 'var(--amber)', marginTop: 3 }}>
-                      ↑ Enter qty above OR add colors in matrix below
-                    </span>
-                  )}
-                </div>
-                {/* Market price — employee can update */}
-                <div className="input-group">
-                  <label className="input-label">Market Price (PKR) {isEmployee && '← Update'}</label>
-                  <input type="number" className="input" min="0" value={item.marketPrice}
-                    onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
-                    style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Amount</label>
-                  <div style={{ padding: '9px 12px', background: 'var(--glass)', borderRadius: 8, border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)' }}>
-                    PKR {amount.toLocaleString()}
+                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div style={{ flex: '0 0 90px' }}>
+                      <label className="input-label">Qty {item.useMatrix && qty > 0 ? '(auto)' : ''}</label>
+                      <input
+                        type="number" className="input" min="0"
+                        value={item.useMatrix && qty > 0 ? qty : item.qty}
+                        onChange={e => updateItem(item.id, 'qty', e.target.value)}
+                        disabled={item.useMatrix && qty > 0}
+                        style={{ borderColor: item.useMatrix && qty > 0 ? 'var(--amber)' : undefined }}
+                        placeholder="Enter qty"
+                      />
+                      {item.useMatrix && qty === 0 && (
+                        <span style={{ fontSize: 11, color: 'var(--amber)', marginTop: 3 }}>↑ or matrix below</span>
+                      )}
+                    </div>
+                    <div style={{ flex: '1 1 140px' }}>
+                      <label className="input-label">Market Price (PKR) {isEmployee && '← Update'}</label>
+                      <input type="number" className="input" min="0" value={item.marketPrice}
+                        onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
+                        style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
+                    </div>
+                    <div style={{ flex: '0 0 110px' }}>
+                      <label className="input-label">Amount</label>
+                      <div style={{ padding: '9px 12px', background: 'var(--glass)', borderRadius: 8, border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap' }}>
+                        PKR {amount.toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                      <button
+                        className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
+                        onClick={() => updateItem(item.id, 'useMatrix', !item.useMatrix)}
+                      >🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}</button>
+                      {form.items.length > 1 && (
+                        <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <button
-                    className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
-                    onClick={() => updateItem(item.id, 'useMatrix', !item.useMatrix)}
-                  >🎨 {item.useMatrix ? 'Hide Matrix' : 'Size/Color'}</button>
-                  {form.items.length > 1 && (
-                    <button className="btn btn-danger btn-sm" onClick={() => removeItem(item.id)}>Remove</button>
-                  )}
                 </div>
                 <div className="input-group" style={{ gridColumn: isEmployee ? 'span 2' : 'span 1' }}>
                   <label className="input-label">Field Note</label>
