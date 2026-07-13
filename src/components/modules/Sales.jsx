@@ -228,23 +228,27 @@ function SaleForm({ initial, onSave, onCancel }) {
                   )}
                 </div>
 
-                <div className="input-group">
-                  <label className="input-label">Qty</label>
-                  <input type="number" className="input" min="1" value={item.qty}
-                    onChange={e => updateItem(item.id, 'qty', e.target.value)}
-                    style={{ borderColor: stockWarn ? 'var(--red)' : undefined }} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Unit</label>
-                  <input className="input" list="unit-list-s" value={item.unit}
-                    onChange={e => updateItem(item.id, 'unit', e.target.value)} />
-                  <datalist id="unit-list-s">
-                    {['pcs', 'sqt', 'meters', 'kg', 'pairs', 'sets', 'dozen'].map(u => <option key={u} value={u} />)}
-                  </datalist>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Color</label>
-                  <input className="input" value={item.color} onChange={e => updateItem(item.id, 'color', e.target.value)} placeholder="optional" />
+                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div style={{ flex: '0 0 90px' }}>
+                      <label className="input-label">Qty</label>
+                      <input type="number" className="input" min="1" value={item.qty}
+                        onChange={e => updateItem(item.id, 'qty', e.target.value)}
+                        style={{ borderColor: stockWarn ? 'var(--red)' : undefined }} />
+                    </div>
+                    <div style={{ flex: '0 0 100px' }}>
+                      <label className="input-label">Unit</label>
+                      <input className="input" list="unit-list-s" value={item.unit}
+                        onChange={e => updateItem(item.id, 'unit', e.target.value)} />
+                      <datalist id="unit-list-s">
+                        {['pcs', 'sqt', 'meters', 'kg', 'pairs', 'sets', 'dozen'].map(u => <option key={u} value={u} />)}
+                      </datalist>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 80 }}>
+                      <label className="input-label">Color</label>
+                      <input className="input" value={item.color} onChange={e => updateItem(item.id, 'color', e.target.value)} placeholder="optional" />
+                    </div>
+                  </div>
                 </div>
               </div>
 

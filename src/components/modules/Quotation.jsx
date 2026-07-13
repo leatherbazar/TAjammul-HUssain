@@ -403,13 +403,15 @@ export default function Quotations() {
                 <td style={{ fontSize: 12 }}>{q.taxRate}%</td>
                 <td><span className={`badge badge-${q.status}`}>{q.status}</span></td>
                 <td>
+                  {q.status === 'cancelled' ? (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>
+                  ) : (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => requestEdit(q)}>✏️</button>
                     <button className="btn btn-danger btn-xs" onClick={() => requestDelete(q.id)}>🗑️</button>
                     <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationPDF(q, q.stealthPrint, currentCompany)}>📄</button>
                     <button className="btn btn-secondary btn-xs" onClick={() => exportQuotationExcel(q)}>📊</button>
                     {existingInv ? (
-                      // Invoice already exists — show the linked invoice number, no duplicate allowed
                       <span style={{
                         fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 700,
                         background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)',
@@ -428,6 +430,7 @@ export default function Quotations() {
                       🛒 SO
                     </button>
                   </div>
+                  )}
                 </td>
               </tr>
               )

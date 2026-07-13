@@ -157,6 +157,7 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
                   <label className="input-label">Qty {item.useMatrix ? '(auto)' : ''}</label>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input type="text" inputMode="decimal" className="input dn-qty-input" placeholder="0 or 10+5"
+                      style={{ flex: 1, minWidth: 0 }}
                       value={item.useMatrix ? qty : item.qty}
                       onChange={e => updateItem(item.id, 'qty', e.target.value)}
                       onBlur={e => updateItem(item.id, 'qty', calcExpr(e.target.value))}
