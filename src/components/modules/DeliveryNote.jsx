@@ -269,7 +269,13 @@ export default function DeliveryNotes() {
                 <td>
                   <select
                     className="input"
-                    style={{ fontSize: 12, padding: '4px 8px', minWidth: 110, cursor: 'pointer' }}
+                    style={{
+                      fontSize: 12, padding: '4px 8px', minWidth: 110, cursor: 'pointer', fontWeight: 600,
+                      ...(n.status === 'delivered'  ? { background: 'rgba(34,197,94,0.18)',  color: '#22c55e',  border: '1px solid rgba(34,197,94,0.4)'  } :
+                          n.status === 'dispatched' ? { background: 'rgba(56,189,248,0.18)', color: '#38bdf8',  border: '1px solid rgba(56,189,248,0.4)' } :
+                          n.status === 'returned'   ? { background: 'rgba(251,146,60,0.18)', color: '#fb923c',  border: '1px solid rgba(251,146,60,0.4)'  } :
+                                                      { background: 'rgba(239,68,68,0.18)',  color: '#ef4444',  border: '1px solid rgba(239,68,68,0.4)'   })
+                    }}
                     value={n.status}
                     onChange={e => {
                       updateRecord('deliveryNotes', n.id, { ...n, status: e.target.value })
