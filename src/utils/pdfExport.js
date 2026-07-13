@@ -6,19 +6,27 @@ import { fmtDate, todayFmt } from './fmt'
 const COMPANY_PROFILES = {
   TAT: {
     logoSrc: '/tataheer-invoice-logo.png',
+    logoW: 133, logoH: 18.7,
     name: 'TATAHEER TRADERS',
     tagline: 'Tataheer Business Group',
     address: '426- Ali Arcade, 13-km Main Multan Road, Lahore',
     phone: '+92(314)4094900',
     email: 'tataheertraders@gmail.com',
+    accentColor: [120, 0, 0],       // dark red
+    headerBg: [248, 248, 248],
+    dividerColor: [180, 180, 180],
   },
   INF: {
     logoSrc: '/logo-inf.png',
+    logoW: 90, logoH: 13,
     name: 'INFINITY CORP',
-    tagline: 'Infinity Corp',
+    tagline: 'Infinity Corp — Excellence in Every Step',
     address: '101- Choudery Plaza Royal Park Lahore',
     phone: '+92-314-855-5566',
     email: 'infinity.crop512@gmail.com',
+    accentColor: [10, 60, 160],     // professional blue
+    headerBg: [240, 245, 255],      // light blue tint
+    dividerColor: [10, 60, 160],
   },
 }
 
@@ -34,8 +42,11 @@ function getProfile(company) {
   }
 }
 
-// Table header color: dark charcoal
-const TABLE_HEAD_COLOR = [30, 30, 40]
+function getHeadStyles(company) {
+  const profile = getProfile(company)
+  const color = profile.accentColor || [30, 30, 40]
+  return { fillColor: color, textColor: 255, fontStyle: 'bold', fontSize: 9 }
+}
 
 // ── PDF icon helpers ─────────────────────────────────────────────────────────
 // Draw a map pin icon (filled teardrop)
@@ -91,23 +102,32 @@ function loadImg(src) {
 async function addHeader(doc, title, docNumber, date, stealth = false, company = null) {
   const pageW = doc.internal.pageSize.getWidth()
   const profile = getProfile(company)
+  const accent  = profile.accentColor  || [120, 0, 0]
+  const hdrBg   = profile.headerBg     || [248, 248, 248]
+  const divClr  = profile.dividerColor || [180, 180, 180]
+  const logoW   = profile.logoW || 133
+  const logoH   = profile.logoH || 18.7
 
   // Header background
-  doc.setFillColor(248, 248, 248)
+  doc.setFillColor(...hdrBg)
   doc.rect(0, 0, pageW, 44, 'F')
 
-  // Logo — exact size: 133mm × 18.7mm
+  // Accent top bar (thin strip)
+  doc.setFillColor(...accent)
+  doc.rect(0, 0, pageW, 2, 'F')
+
+  // Logo
   try {
     const img = await loadImg(profile.logoSrc)
     if (img) {
-      doc.addImage(img, 'PNG', 8, 3, 133, 18.7)
+      doc.addImage(img, 'PNG', 8, 4, logoW, logoH)
     } else {
       throw new Error('logo not loaded')
     }
   } catch {
     doc.setFontSize(16)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 30, 30)
+    doc.setTextColor(...accent)
     doc.text(profile.name, 14, 16)
   }
 
@@ -116,13 +136,11 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
 
-  // Address line with pin icon
   if (profile.address) {
     iconPin(doc, 10, 27)
     doc.text(profile.address, 14, 27)
   }
 
-  // Phone + Email on same row with icons
   let icx = 14
   if (profile.phone) {
     iconPhone(doc, 10, 33)
@@ -136,10 +154,10 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
     doc.text(profile.email, icx + 2, 33)
   }
 
-  // Document title (right, dark red)
+  // Document title (right, company accent color)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(120, 0, 0)
+  doc.setTextColor(...accent)
   doc.text(title, pageW - 12, 10, { align: 'right' })
 
   // Doc number & date
@@ -149,9 +167,9 @@ async function addHeader(doc, title, docNumber, date, stealth = false, company =
   doc.text(`No: ${docNumber}`, pageW - 12, 20, { align: 'right' })
   doc.text(`Date: ${fmtDate(date) || todayFmt()}`, pageW - 12, 28, { align: 'right' })
 
-  // Divider
-  doc.setDrawColor(180, 180, 180)
-  doc.setLineWidth(0.4)
+  // Divider (company accent color)
+  doc.setDrawColor(...divClr)
+  doc.setLineWidth(0.6)
   doc.line(0, 44, pageW, 44)
 
   doc.setTextColor(0, 0, 0)
@@ -180,7 +198,6 @@ function addFooter(doc, company = null) {
   }
 }
 
-const headStyles = { fillColor: TABLE_HEAD_COLOR, textColor: 255, fontStyle: 'bold', fontSize: 9 }
 const bodyStyles = { fontSize: 8.5 }
 const altStyles  = { fillColor: [245, 245, 248] }
 
@@ -249,7 +266,7 @@ export async function exportQuotationPDF(quotation, stealth = false, company = n
   head.push('Qty')
   if (!stealth) { head.push('Unit Price'); head.push('Amount') }
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (!stealth) {
     let finalY = doc.lastAutoTable.finalY + 10
@@ -344,7 +361,7 @@ export async function exportInvoicePDF(invoice, stealth = false, company = null)
   head.push('Qty')
   if (!stealth) { head.push('Unit Price'); head.push('Amount') }
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (!stealth) {
     const finalY = doc.lastAutoTable.finalY + 8
@@ -404,7 +421,7 @@ export async function exportSupplyOrderPDF(order, company = null) {
   autoTable(doc, {
     startY: y,
     head: [['#', 'Description', 'Color', 'Qty', 'Market Price', 'Amount', 'Field Note']],
-    body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles,
+    body: bodyRows, theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles,
     columnStyles: { 6: { cellWidth: 35 } },
   })
 
@@ -442,7 +459,7 @@ export async function exportDayBookPDF(entries, dateRange, company = null) {
       e.debit  ? `PKR ${Number(e.debit ).toLocaleString()}` : '—',
       e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—',
     ]),
-    theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles,
+    theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles,
     columnStyles: {
       6: { halign: 'right', textColor: [180, 30, 30] },
       7: { halign: 'right', textColor: [20, 130, 60] },
@@ -495,7 +512,7 @@ export async function exportLedgerPDF(contact, entries, company = null) {
       e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—',
       `PKR ${Number(e.balance || 0).toLocaleString()}`,
     ]),
-    theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles,
+    theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles,
     columnStyles: {
       4: { halign: 'right', textColor: [180, 30, 30] },
       5: { halign: 'right', textColor: [20, 130, 60] },
@@ -578,7 +595,7 @@ export async function exportDeliveryNotePDF(note, company = null) {
   head.push('Qty')
   head.push('Note')
 
-  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles, bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
+  autoTable(doc, { startY: y, head: [head], body: bodyRows, theme: 'striped', headStyles: getHeadStyles(company), bodyStyles, alternateRowStyles: altStyles, columnStyles: { 0: { cellWidth: 10, halign: 'center' } } })
 
   if (note.notes) {
     const finalY = doc.lastAutoTable.finalY + 8
