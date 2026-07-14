@@ -13,21 +13,22 @@ const COMPANY_PROFILES = {
     phone: '+92(314)4094900',
     email: 'tataheertraders@gmail.com',
     style: 'TAT',
-    accent: [130, 0, 0],      // dark red
+    accent: [130, 0, 0],
     dark:   [100, 0, 0],
     light:  [255, 245, 245],
   },
   INF: {
     logoSrc: '/logo-inf.png',
-    logoW: 90, logoH: 13,
+    logoW: 108, logoH: 23,
     name: 'INFINITY CORP',
     tagline: 'Infinity Corp — Excellence in Every Step',
     address: '101- Choudery Plaza Royal Park Lahore',
     phone: '+92-314-855-5566',
     email: 'infinity.crop512@gmail.com',
     style: 'INF',
-    accent: [218, 165, 32],   // gold
-    dark:   [18, 42, 100],    // deep navy
+    accent: [0, 160, 220],    // sky blue / cyan (for total row)
+    dark:   [18, 42, 100],    // deep navy (for table header + footer)
+    titleColor: [0, 60, 160], // bold blue for title text
     light:  [240, 245, 255],
   },
 }
@@ -117,57 +118,52 @@ async function addHeaderTAT(doc, title, docNumber, date, profile) {
   doc.setTextColor(0, 0, 0)
 }
 
-// ── INF header: bold dark navy + gold design ─────────────────────────────────
+// ── INF header: clean white — logo left, title right, diagonal divider ───────
 async function addHeaderINF(doc, title, docNumber, date, profile) {
   const pageW = doc.internal.pageSize.getWidth()
-  const [nr, ng, nb] = profile.dark    // navy
-  const [gr, gg, gb] = profile.accent  // gold
+  const titleBlue = profile.titleColor || [0, 60, 160]
 
-  // Full navy background
-  doc.setFillColor(nr, ng, nb)
-  doc.rect(0, 0, pageW, 46, 'F')
-
-  // Logo — white backing so it shows on dark bg
+  // Logo — large, directly on white background
   try {
     const img = await loadImg(profile.logoSrc)
     if (img) {
-      doc.setFillColor(255, 255, 255)
-      doc.roundedRect(8, 6, profile.logoW + 6, profile.logoH + 6, 2, 2, 'F')
-      doc.addImage(img, 'PNG', 11, 9, profile.logoW, profile.logoH)
+      doc.addImage(img, 'PNG', 12, 6, profile.logoW, profile.logoH)
     } else throw new Error()
   } catch {
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(18)
-    doc.setTextColor(255, 255, 255)
-    doc.text(profile.name, 12, 22)
+    doc.setFontSize(26)
+    doc.setTextColor(...titleBlue)
+    doc.text(profile.name, 12, 26)
   }
 
-  // Contact info (below logo, light text)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7.5)
-  doc.setTextColor(180, 200, 240)
-  doc.text(profile.address || '', 12, 32)
-  doc.text(`${profile.phone}   |   ${profile.email}`, 12, 39)
-
-  // Gold badge for document title (top-right)
-  const badgeW = 58
-  doc.setFillColor(gr, gg, gb)
-  doc.roundedRect(pageW - badgeW - 8, 5, badgeW, 20, 3, 3, 'F')
+  // Document title — bold blue, top-right
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.setTextColor(nr, ng, nb)   // navy text on gold badge
-  doc.text(title, pageW - 8 - badgeW / 2, 17, { align: 'center' })
+  doc.setFontSize(17)
+  doc.setTextColor(...titleBlue)
+  doc.text(title, pageW - 12, 16, { align: 'right' })
 
-  // Doc No + Date (right, white text)
+  // Doc number — gray, right-aligned
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.setTextColor(210, 225, 255)
-  doc.text(`No: ${docNumber}`, pageW - 10, 31, { align: 'right' })
-  doc.text(`Date: ${fmtDate(date) || todayFmt()}`, pageW - 10, 39, { align: 'right' })
+  doc.setFontSize(9)
+  doc.setTextColor(90, 90, 90)
+  doc.text(`No: ${docNumber}`, pageW - 12, 24, { align: 'right' })
 
-  // Gold bottom stripe
-  doc.setFillColor(gr, gg, gb)
-  doc.rect(0, 43, pageW, 3, 'F')
+  // Date — left side below logo
+  doc.setFontSize(8.5)
+  doc.setTextColor(110, 110, 110)
+  doc.text(`Date: ${fmtDate(date) || todayFmt()}`, 12, 37)
+
+  // Diagonal divider — gray left segment fading into blue right segment
+  const midX = pageW * 0.52
+  const yLeft = 43, yMid = 41, yRight = 39
+
+  doc.setDrawColor(190, 200, 210)
+  doc.setLineWidth(0.7)
+  doc.line(12, yLeft, midX, yMid)
+
+  doc.setDrawColor(...(profile.titleColor || [0, 60, 160]))
+  doc.setLineWidth(0.7)
+  doc.line(midX, yMid, pageW - 12, yRight)
 
   doc.setTextColor(0, 0, 0)
 }
@@ -205,35 +201,28 @@ function addFooterINF(doc, profile) {
   const pageCount = doc.internal.getNumberOfPages()
   const pageW = doc.internal.pageSize.getWidth()
   const [nr, ng, nb] = profile.dark
-  const [gr, gg, gb] = profile.accent
 
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
 
-    // Gold "Thank you" bar
-    doc.setFillColor(gr, gg, gb)
-    doc.rect(0, 276, pageW * 0.62, 14, 'F')
+    // System notice just above bar
+    doc.setFontSize(6.5)
+    doc.setTextColor(160, 160, 160)
+    doc.text('System generated document. No signature and stamp required.', pageW / 2, 278, { align: 'center' })
 
-    // Navy right block
+    // Dark navy footer bar
     doc.setFillColor(nr, ng, nb)
-    doc.rect(pageW * 0.62, 276, pageW * 0.38, 14, 'F')
+    doc.rect(0, 281, pageW, 16, 'F')
 
-    // Thank you text
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(nr, ng, nb)
-    doc.text('THANK YOU FOR YOUR BUSINESS', 12, 285)
-
-    // Page number in white on navy
+    // Contact info — white text, left side
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(255, 255, 255)
-    doc.text(`Page ${i} of ${pageCount}`, pageW - 10, 285, { align: 'right' })
+    const info = [profile.address, profile.phone, profile.email].filter(Boolean).join('   |   ')
+    doc.text(info, 12, 291)
 
-    // System notice above bar
-    doc.setFontSize(6.5)
-    doc.setTextColor(160, 160, 160)
-    doc.text('System generated document. No signature and stamp required.', pageW / 2, 274, { align: 'center' })
+    // Page number — right side
+    doc.text(`Page ${i} of ${pageCount}`, pageW - 12, 291, { align: 'right' })
   }
 }
 
@@ -251,9 +240,10 @@ function getTableStyles(company) {
   const profile = getProfile(company)
   if (profile.style === 'INF') {
     return {
+      // Navy header rows, very-light-blue alternating rows (matching sample)
       headStyles: { fillColor: profile.dark, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      bodyStyles: { fontSize: 8.5 },
-      alternateRowStyles: { fillColor: [240, 245, 255] },
+      bodyStyles: { fontSize: 8.5, textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [237, 244, 252] },
     }
   }
   return {
@@ -266,33 +256,39 @@ function getTableStyles(company) {
 // ── Client info box ───────────────────────────────────────────────────────────
 function drawClientBox(doc, y, label, name, address, contact, company) {
   const profile = getProfile(company)
-  const [r, g, b] = profile.style === 'INF' ? profile.dark : profile.accent
+  const isINF = profile.style === 'INF'
+  const barColor = isINF ? (profile.titleColor || [0, 60, 160]) : profile.accent
+  const [r, g, b] = barColor
 
-  doc.setFillColor(245, 247, 252)
   const lines = [address, contact].filter(Boolean)
-  const boxH = lines.length * 6 + 16
-  doc.roundedRect(12, y, 186, boxH, 2, 2, 'F')
+  const boxH = lines.length * 6 + 18
 
-  // Left accent bar on the box
+  // Gray background only for TAT; INF uses plain white with left bar only
+  if (!isINF) {
+    doc.setFillColor(245, 247, 252)
+    doc.roundedRect(12, y, 186, boxH, 2, 2, 'F')
+  }
+
+  // Left accent bar
   doc.setFillColor(r, g, b)
-  doc.rect(12, y, 2.5, boxH, 'F')
+  doc.rect(12, y, 3, boxH, 'F')
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(r, g, b)
-  doc.text(label, 18, y + 6)
+  doc.text(label, 19, y + 7)
 
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9.5)
-  doc.setTextColor(30, 30, 30)
-  doc.text(name || '—', 18, y + 13)
+  doc.setFontSize(10)
+  doc.setTextColor(25, 25, 25)
+  doc.text(name || '—', 19, y + 15)
 
-  let ly = y + 13
+  let ly = y + 15
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
   doc.setTextColor(80, 80, 80)
-  if (address) { ly += 6; doc.text(address, 18, ly) }
-  if (contact) { ly += 6; doc.text(`Tel: ${contact}`, 18, ly) }
+  if (address) { ly += 6; doc.text(address, 19, ly) }
+  if (contact) { ly += 6; doc.text(`Tel: ${contact}`, 19, ly) }
 
   return boxH
 }
@@ -301,34 +297,38 @@ function drawClientBox(doc, y, label, name, address, contact, company) {
 function drawTotals(doc, y, rows, company) {
   const profile = getProfile(company)
   const pageW = doc.internal.pageSize.getWidth()
-  const [r, g, b] = profile.style === 'INF' ? profile.dark : profile.accent
-  const [gr, gg, gb] = profile.style === 'INF' ? profile.accent : [r, g, b]
+  const isINF = profile.style === 'INF'
 
-  const boxX = pageW - 92
-  const rowH = 8
-  const boxH = rows.length * rowH + 4
+  // INF: sky-blue total row. TAT: accent-colored total row.
+  const totalBg  = isINF ? profile.accent : profile.accent   // cyan for INF, red for TAT
+  const totalTxt = [255, 255, 255]
 
+  const boxX = pageW - 94
+  const boxW = 88
+  const rowH = 9
+
+  // Light container behind all rows
   doc.setFillColor(245, 247, 250)
-  doc.roundedRect(boxX - 2, y - 4, 86, boxH, 2, 2, 'F')
+  doc.roundedRect(boxX - 2, y - 5, boxW + 2, rows.length * rowH + 4, 2, 2, 'F')
 
   rows.forEach((row, i) => {
     const isLast = i === rows.length - 1
     const ty = y + i * rowH
 
     if (isLast) {
-      // Highlight last row (TOTAL)
-      doc.setFillColor(gr, gg, gb)
-      doc.roundedRect(boxX - 2, ty - 5, 86, rowH + 2, 2, 2, 'F')
+      doc.setFillColor(...totalBg)
+      doc.roundedRect(boxX - 2, ty - 6, boxW + 2, rowH + 2, 2, 2, 'F')
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(9.5)
-      doc.setTextColor(profile.style === 'INF' ? r : 255, profile.style === 'INF' ? g : 255, profile.style === 'INF' ? b : 255)
+      doc.setFontSize(10)
+      doc.setTextColor(...totalTxt)
     } else {
-      doc.setFont(i === 0 ? 'helvetica' : 'helvetica', i === 0 ? 'normal' : 'bold')
+      const isBold = row[0].includes('Tax') || row[0] === 'BALANCE' || row[0] === 'TOTAL DUE'
+      doc.setFont('helvetica', isBold ? 'bold' : 'normal')
       doc.setFontSize(8.5)
       doc.setTextColor(60, 60, 60)
     }
 
-    doc.text(row[0], boxX + 38, ty, { align: 'right' })
+    doc.text(row[0], pageW - 50, ty, { align: 'right' })
     doc.text(row[1], pageW - 12, ty, { align: 'right' })
   })
 }
