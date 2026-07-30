@@ -692,7 +692,9 @@ function calcPL({ year, period = 'annual', month = 0 }) {
 
   // Exclude drawing/transfer entries from operating expenses
   const cbExpenses  = cbAll.filter(e=>e.type==='expense' && dateInRange(e.date)
-                        && e.refType !== 'owner_drawing' && e.refType !== 'transfer'
+                        && e.refType !== 'owner_drawing'
+                        && e.refType !== 'transfer'
+                        && e.refType !== 'salary'   // counted separately via K.SPAY salaryExp — exclude to prevent double-count
                       ).reduce((s,e)=>s+Number(e.amount||0),0);
   const salaryExp   = spays.filter(p=>isCBFromCutoff(p) && dateInRange(p.date)).reduce((s,p)=>s+Number(p.amount||0),0);
   const totalExpenses = cbExpenses + salaryExp;
@@ -1767,9 +1769,10 @@ function Dashboard({ setPage }) {
   const totalAFCollected    = selPaysOfMonth.reduce((s, p) => s + Number(p.annualFund || 0), 0);
   const totalBooksCollected = selPaysOfMonth.reduce((s, p) => s + Number(p.booksPaid || 0), 0);
   const totalStudentIncome  = totalFeeCollected + totalAFCollected + totalBooksCollected;
-  const allExpenses  = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
-  const spays        = S.get(K.SPAY, []);
-  const totalSalaryPaid = spays.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const allExpenses     = monthExp.reduce((s, e) => s + Number(e.amount || 0), 0); // current month only
+  const spays           = S.get(K.SPAY, []);
+  const totalSalaryPaid = spays.filter(p => !p.voided && Number(p.month) === m && Number(p.year) === y)
+                               .reduce((s, p) => s + Number(p.amount || 0), 0); // current month, exclude voided
 
   // ── Expense Heads from Cash Book — also scoped to SELECTED MONTH ──
   const dashCbAll   = S.get(K.CBOOK, []);
@@ -6398,10 +6401,11 @@ function Staff() {
   const canAdd      = isAdmin || isPrincipal; // principal can add staff & pay salary
   const [staff, setStaff]   = useState(() => S.get(K.STAFF, []));
   const [spays, setSpays]   = useState(() => S.get(K.SPAY, []));
-  const [form, setForm]     = useState(null);
-  const [delId, setDelId]   = useState(null);
-  const [payMod, setPayMod] = useState(null);
-  const [histMod, setHistMod] = useState(null);
+  const [form, setForm]         = useState(null);
+  const [delId, setDelId]       = useState(null);
+  const [payMod, setPayMod]     = useState(null);
+  const [histMod, setHistMod]   = useState(null);
+  const [delSpayConf, setDelSpayConf] = useState(null); // salary payment to void/delete
   const [staffFilter, setStaffFilter] = useState('active'); // 'active' | 'left' | 'all'
   const [pf, setPf]         = useState({ month: NOW.getMonth(), year: NOW.getFullYear(), amount:'', note:'', paymentMethod:'Cash', workingDays:26, paidLeaves:0, unpaidLeaves:0 });
   const [vm, setVm]         = useState(NOW.getMonth());
@@ -6410,6 +6414,28 @@ function Staff() {
 
   const persistStaff = d => { S.set(K.STAFF, d); setStaff(d); };
   const persistSpays = d => { S.set(K.SPAY, d); setSpays(d); };
+
+  // RULE 3 — Delete/void salary payment preserving unpaid-leave deductions.
+  // If the payment carried a deduction (e.g. Rs. 925 leave deduction from a Rs. 4000 salary),
+  // the deduction must persist even after the payment is removed — otherwise salary would
+  // be recreated in full (4000) instead of staying at the reduced payable (3075).
+  // Solution: void the record (amount=0, voided=true) so the deduction field stays,
+  // while the paid total becomes 0 and remaining correctly reflects salary − deductions.
+  const deleteSpay = (pay) => {
+    if (!window.confirm(`Delete salary payment ${pay.rcpt} — Rs. ${Number(pay.amount).toLocaleString()}?\n${pay.deduction > 0 ? `\nNote: Unpaid leave deduction of Rs. ${Number(pay.deduction).toLocaleString()} will be PRESERVED.\nRemaining payable will be Rs. ${(Number(histMod?.salary || 0) - Number(pay.deduction)).toLocaleString()} (not full salary).` : '\nThis payment will be permanently removed.'}`)) return;
+    // Reverse the linked Cash Book entry
+    if (pay.cbEntryId) {
+      S.set(K.CBOOK, S.get(K.CBOOK, []).filter(e => e.id !== pay.cbEntryId));
+    }
+    if (Number(pay.deduction) > 0) {
+      // Void: preserve the deduction, zero the paid amount
+      persistSpays(spays.map(p => p.id === pay.id ? { ...p, amount: 0, voided: true } : p));
+    } else {
+      // No deduction — safe to fully remove
+      persistSpays(spays.filter(p => p.id !== pay.id));
+    }
+    setDelSpayConf(null);
+  };
 
   const save = () => {
     if (!form.name.trim()) return alert('Name is required.');
@@ -6432,15 +6458,17 @@ function Staff() {
     if (acctInfo && acctInfo.balance < amt) {
       return alert(`⚠️ Insufficient Balance!\n\n${acctInfo.name} has Rs. ${acctInfo.balance.toLocaleString()} available.\nYou entered Rs. ${amt.toLocaleString()}.\n\nPlease enter Rs. ${acctInfo.balance.toLocaleString()} or less, or change payment method.`);
     }
-    const alreadyPaid = monthPaidTotalMap[payMod.id] || 0;
-    const remaining = Math.max(0, Number(payMod.salary) - alreadyPaid);
+    const alreadyPaid       = monthPaidTotalMap[payMod.id]  || 0;
+    const prevDeductions    = monthDeductionMap[payMod.id]  || 0; // deductions from voided payments persist
+    const remaining = Math.max(0, Number(payMod.salary) - prevDeductions - alreadyPaid);
     if (amt > remaining + 0.01) {
       const confirm = window.confirm(`⚠️ Overpayment Warning!\n\nRemaining salary: Rs. ${remaining.toLocaleString()}\nYou entered: Rs. ${amt.toLocaleString()}\n\nContinue anyway?`);
       if (!confirm) return;
     }
     const now = new Date().toISOString();
-    const isPartial = alreadyPaid + amt < Number(payMod.salary) - 0.01;
+    const isPartial = prevDeductions + alreadyPaid + amt < Number(payMod.salary) - 0.01;
     const leaveNote = uLeaves > 0 ? ` [${uLeaves} unpaid leave(s) − Rs. ${deduction.toLocaleString()}]` : '';
+    const salCbId = uid();
     const pay = {
       id: uid(), staffId: payMod.id,
       month: Number(pf.month), year: Number(pf.year),
@@ -6450,24 +6478,32 @@ function Staff() {
       date: now,
       rcpt: 'SAL-' + Date.now().toString().slice(-6),
       partial: isPartial,
-      // ── Global Engine: leave data stored in payment record ────────────
+      cbEntryId: salCbId,
+      // ── Accounting Engine: leave data stored in payment record ────────────
       workingDays: wDays, paidLeaves: pLeaves,
       unpaidLeaves: uLeaves, perDay, deduction,
     };
     persistSpays([...spays, pay]);
-    // ── Global Engine: Cash Book entry with leave detail ─────────────────
+    // ── Accounting Engine: Cash Book entry tagged salary (excluded from cbExpenses to prevent double-count)
     addCashBookEntry('expense',
       `Salary — ${payMod.name} (${MONTHS[Number(pf.month)]} ${Number(pf.year)})${leaveNote}`,
-      amt, pf.paymentMethod || 'Cash', now, pf.note);
+      amt, pf.paymentMethod || 'Cash', now, pf.note, 'salary', salCbId);
     setPayMod(null);
     printSlip(pay, payMod);
   };
 
-  // Total paid per staff for selected month (supports multiple/partial payments)
+  // Total paid per staff for selected month (voided payments contribute 0 to paid but preserve their deduction)
   const monthPaidTotalMap = {};
+  const monthDeductionMap = {};
   const monthPaysList = {};
   spays.filter(p => p.month === vm && p.year === vy).forEach(p => {
-    monthPaidTotalMap[p.staffId] = (monthPaidTotalMap[p.staffId] || 0) + Number(p.amount);
+    if (!p.voided) {
+      monthPaidTotalMap[p.staffId] = (monthPaidTotalMap[p.staffId] || 0) + Number(p.amount);
+    }
+    // Deductions carry forward even after a payment is voided (Rule 3: unpaid leave deduction persists)
+    if (p.deduction) {
+      monthDeductionMap[p.staffId] = (monthDeductionMap[p.staffId] || 0) + Number(p.deduction);
+    }
     if (!monthPaysList[p.staffId]) monthPaysList[p.staffId] = [];
     monthPaysList[p.staffId].push(p);
   });
@@ -6661,11 +6697,12 @@ function Staff() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {displayStaff.map((m, idx) => {
-                    const paidAmt  = monthPaidTotalMap[m.id] || 0;
-                    const salary   = Number(m.salary);
-                    const remaining = Math.max(0, salary - paidAmt);
-                    const isPaid    = paidAmt >= salary && salary > 0;
-                    const isPartial = paidAmt > 0 && paidAmt < salary;
+                    const paidAmt    = monthPaidTotalMap[m.id] || 0;
+                    const deducted   = monthDeductionMap[m.id] || 0;
+                    const salary     = Number(m.salary);
+                    const remaining  = Math.max(0, salary - deducted - paidAmt);
+                    const isPaid     = deducted + paidAmt >= salary && salary > 0;
+                    const isPartial  = paidAmt > 0 && paidAmt < salary - deducted;
                     const pays      = monthPaysList[m.id] || [];
                     const lastPay   = pays[pays.length - 1];
                     return (
@@ -6756,8 +6793,9 @@ function Staff() {
       {payMod && (
         <Modal title={`Pay Salary — ${payMod.name}`} onClose={() => setPayMod(null)}>
           {(() => {
-            const alreadyPaid = monthPaidTotalMap[payMod.id] || 0;
-            const rem = Math.max(0, Number(payMod.salary) - alreadyPaid);
+            const alreadyPaid  = monthPaidTotalMap[payMod.id] || 0;
+            const prevDeducted = monthDeductionMap[payMod.id] || 0;
+            const rem = Math.max(0, Number(payMod.salary) - prevDeducted - alreadyPaid);
             const acctInfo = getAcctBalance(pf.paymentMethod || 'Cash');
             const enteredAmt = Number(pf.amount || 0);
             const balanceOk = !acctInfo || acctInfo.balance >= enteredAmt;
@@ -6885,27 +6923,30 @@ function Staff() {
       {/* Salary History */}
       {histMod && (() => {
         const hist = [...spays.filter(p => p.staffId === histMod.id)].sort((a,b) => new Date(b.date)-new Date(a.date));
-        const total = hist.reduce((s,p) => s + Number(p.amount), 0);
+        const total = hist.filter(p => !p.voided).reduce((s,p) => s + Number(p.amount), 0);
+        const totalDeducted = hist.reduce((s,p) => s + Number(p.deduction || 0), 0);
         return (
           <Modal title={`Salary History — ${histMod.name}`} onClose={() => setHistMod(null)} wide>
             <p className="text-sm text-gray-500 mb-1">{histMod.role} &nbsp;|&nbsp; Monthly Salary: <strong>Rs. {Number(histMod.salary).toLocaleString()}</strong></p>
-            <div className="flex gap-4 mb-4 text-sm">
+            <div className="flex flex-wrap gap-4 mb-4 text-sm">
               <span className="font-bold text-emerald-700">Total Paid: Rs. {total.toLocaleString()}</span>
-              {total < Number(histMod.salary) && <span className="font-bold text-red-500">Balance Due: Rs. {(Number(histMod.salary)-total).toLocaleString()}</span>}
+              {totalDeducted > 0 && <span className="font-bold text-orange-600">Deductions: Rs. {totalDeducted.toLocaleString()}</span>}
             </div>
             {hist.length === 0
               ? <p className="text-center text-gray-400 py-6">No salary payments recorded.</p>
               : <div className="space-y-2">
                   {hist.map(p => (
-                    <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl ${p.voided ? 'bg-red-50 border border-red-200 opacity-60' : 'bg-gray-50'}`}>
                       <div>
-                        <p className="font-semibold text-sm text-gray-800">{MONTHS[p.month]} {p.year}</p>
+                        <p className="font-semibold text-sm text-gray-800">{MONTHS[p.month]} {p.year} {p.voided ? <span className="text-xs text-red-500 font-normal">(voided)</span> : ''}</p>
                         <p className="text-xs text-gray-400 font-mono">{p.rcpt} &nbsp;|&nbsp; {p.paymentMethod||'Cash'}</p>
+                        {p.deduction > 0 && <p className="text-xs text-orange-600 mt-0.5">Leave deduction: Rs. {Number(p.deduction).toLocaleString()}</p>}
                         {p.note && <p className="text-xs text-gray-400 mt-0.5">{p.note}</p>}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-emerald-700">Rs. {Number(p.amount).toLocaleString()}</span>
-                        <Btn sm variant="outline" onClick={() => printSlip(p, histMod)}>🖨️ Slip</Btn>
+                        <span className={`font-bold ${p.voided ? 'text-gray-400 line-through' : 'text-emerald-700'}`}>Rs. {Number(p.amount).toLocaleString()}</span>
+                        {!p.voided && <Btn sm variant="outline" onClick={() => printSlip(p, histMod)}>🖨️ Slip</Btn>}
+                        {!p.voided && <Btn sm variant="red" onClick={() => setDelSpayConf(p)}>🗑️</Btn>}
                       </div>
                     </div>
                   ))}
@@ -6914,6 +6955,25 @@ function Staff() {
           </Modal>
         );
       })()}
+
+      {delSpayConf && (
+        <Modal title="Delete Salary Payment" onClose={() => setDelSpayConf(null)}>
+          <p className="text-gray-700 mb-3">Delete payment <strong>{delSpayConf.rcpt}</strong> — Rs. {Number(delSpayConf.amount).toLocaleString()}?</p>
+          {Number(delSpayConf.deduction) > 0
+            ? <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-sm text-amber-800">
+                <p className="font-bold mb-1">⚠️ Unpaid Leave Deduction Will Be Preserved</p>
+                <p>Deduction: Rs. {Number(delSpayConf.deduction).toLocaleString()} stays locked.</p>
+                <p>Paid will become Rs. 0. Remaining payable: Rs. {(Number(histMod?.salary||0) - Number(delSpayConf.deduction)).toLocaleString()}.</p>
+                <p className="text-xs mt-1 text-amber-600">The payment record is voided — leave penalty is never reversed.</p>
+              </div>
+            : <p className="text-sm text-gray-500 mb-4">No deductions — this payment will be permanently removed.</p>
+          }
+          <div className="flex gap-2">
+            <Btn full variant="red" onClick={() => deleteSpay(delSpayConf)}>Confirm Delete</Btn>
+            <Btn variant="outline" onClick={() => setDelSpayConf(null)}>Cancel</Btn>
+          </div>
+        </Modal>
+      )}
 
       {delId && (
         <Modal title="Delete Staff" onClose={() => setDelId(null)}>
@@ -9203,12 +9263,16 @@ function CashBook() {
         })}
       </div>
 
-      {/* ── Real-Time Collection Heads ── */}
+      {/* ── Real-Time Collection Heads — CURRENT MONTH ONLY ── */}
       {(() => {
-        const pays   = S.get(K.PAY,  []).filter(isFromCutoff);
-        const exps   = S.get(K.EXP,  []).filter(e => isCBFromCutoff({date: e.date}));
-        const spays  = S.get(K.SPAY, []).filter(e => isCBFromCutoff({date: e.date}));
-        const vpays  = S.get(K.VPAY, []).filter(e => isCBFromCutoff({date: e.date}));
+        const _now   = NOW;
+        const _cm    = _now.getMonth();
+        const _cy    = _now.getFullYear();
+        const inCurMonth = e => { const d = new Date(e.date || 0); return !isNaN(d) && d.getMonth() === _cm && d.getFullYear() === _cy; };
+        const pays   = S.get(K.PAY,  []).filter(p => isFromCutoff(p) && Number(p.month) === _cm && Number(p.year) === _cy);
+        const exps   = S.get(K.EXP,  []).filter(inCurMonth);
+        const spays  = S.get(K.SPAY, []).filter(e => !e.voided && inCurMonth(e));
+        const vpays  = S.get(K.VPAY, []).filter(inCurMonth);
         // Income heads
         const feeCol  = pays.reduce((s,p) => s + Number(p.amount      || 0), 0);
         const afCol   = pays.reduce((s,p) => s + Number(p.annualFund   || 0), 0);
@@ -9226,7 +9290,7 @@ function CashBook() {
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-bold text-gray-700">📊 Real-Time Collection Summary</h3>
-              <span className="text-xs text-gray-400">(June 2026 onwards)</span>
+              <span className="text-xs text-gray-400">(Current Month — {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][NOW.getMonth()]} {NOW.getFullYear()})</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Income */}
