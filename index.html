@@ -718,6 +718,140 @@ function calcPL({ year, period = 'annual', month = 0 }) {
            ownerCapital, ownerDrawing, ownerEquity, allTimeNetPL };
 }
 
+// ── ACCOUNTING ENGINE — event-driven financial transaction bus ────────────────
+// Every financial S.set() flows through here automatically (S.set is wrapped).
+// No schema changes · No data migration · No UI redesign · No storage key changes.
+//
+// Transaction flow for any event type:
+//   FEE_PAYMENT   → K.PAY + K.CBOOK → Student Ledger, Family Ledger,
+//                                       Cash Book, Dashboard, Statements, P&L
+//   SALARY_PAYMENT→ K.SPAY + K.CBOOK → Staff Ledger, Cash Book, P&L
+//   VENDOR_PAYMENT→ K.VPAY + K.CBOOK → Vendor Ledger, Cash Book, P&L
+//   EXPENSE       → K.EXP  + K.CBOOK → Cash Book, P&L
+//   ANNUAL_FUND   → K.PAY            → Student Ledger, P&L
+//   BOOK_SALE     → K.SBOOK + K.CBOOK→ Inventory, Cash Book, P&L
+//   OWNER_CAPITAL → K.CBOOK          → Cash Book, Equity
+//   OWNER_DRAWING → K.CBOOK          → Cash Book, Equity
+//   TRANSFER      → K.CBOOK          → Cash Book
+//   STUDENT       → K.STU            → Student module, Dashboard
+//   CLASS_FEE     → K.CF             → All fee calculations
+//   STAFF         → K.STAFF          → Staff module, Salary Engine
+//
+const AccountingEngine = (function() {
+
+  // ── Financial keys monitored by this engine ──
+  const FINANCIAL_KEYS = new Set([
+    K.PAY, K.EXP, K.SPAY, K.VPAY,
+    K.CBOOK, K.CF, K.STU, K.STAFF,
+    K.SBOOK, K.ASSET, K.ACCT,
+  ]);
+
+  // ── Transaction type registry ──
+  // Each type documents which storage keys it writes and what modules it affects.
+  const TX_TYPES = {
+    FEE_PAYMENT:    { keys: [K.PAY, K.CBOOK],   label: 'Fee Payment',    modules: ['StudentLedger','FamilyLedger','CashBook','Dashboard','Statements','PL'] },
+    ANNUAL_FUND:    { keys: [K.PAY],             label: 'Annual Fund',    modules: ['StudentLedger','Dashboard','PL'] },
+    SALARY_PAYMENT: { keys: [K.SPAY, K.CBOOK],  label: 'Salary Payment', modules: ['StaffLedger','CashBook','PL'] },
+    VENDOR_PAYMENT: { keys: [K.VPAY, K.CBOOK],  label: 'Vendor Payment', modules: ['VendorLedger','CashBook','PL'] },
+    EXPENSE:        { keys: [K.EXP, K.CBOOK],   label: 'Expense',        modules: ['CashBook','PL'] },
+    BOOK_SALE:      { keys: [K.SBOOK, K.CBOOK], label: 'Book Sale',      modules: ['Inventory','CashBook','PL'] },
+    OWNER_CAPITAL:  { keys: [K.CBOOK],          label: 'Owner Capital',  modules: ['CashBook','Equity'] },
+    OWNER_DRAWING:  { keys: [K.CBOOK],          label: 'Owner Drawing',  modules: ['CashBook','Equity'] },
+    TRANSFER:       { keys: [K.CBOOK],          label: 'Transfer',       modules: ['CashBook'] },
+    STUDENT:        { keys: [K.STU],            label: 'Student',        modules: ['Students','Dashboard'] },
+    CLASS_FEE:      { keys: [K.CF],             label: 'Class Fee',      modules: ['FeeCalculations'] },
+    STAFF:          { keys: [K.STAFF],          label: 'Staff',          modules: ['Staff','SalaryEngine'] },
+  };
+
+  // ── Subscriber maps ──
+  // Per-key: Map<storageKey, Set<fn>>  — targeted subscriptions
+  // Global: Set<fn>                    — any financial key write
+  const _keyListeners    = new Map();
+  const _globalListeners = new Set();
+
+  // subscribe(fn)       → fires on ANY financial key write
+  // subscribe(key, fn)  → fires only when that specific key is written
+  // Returns an unsubscribe function.
+  function subscribe(keyOrFn, fn) {
+    if (typeof keyOrFn === 'function') {
+      _globalListeners.add(keyOrFn);
+      return () => _globalListeners.delete(keyOrFn);
+    }
+    if (!_keyListeners.has(keyOrFn)) _keyListeners.set(keyOrFn, new Set());
+    _keyListeners.get(keyOrFn).add(fn);
+    return () => { const s = _keyListeners.get(keyOrFn); if (s) s.delete(fn); };
+  }
+
+  // Internal: fire listeners after a financial write
+  function _notify(key, value) {
+    if (!FINANCIAL_KEYS.has(key)) return;
+    const evt = { key, value, ts: Date.now() };
+    const perKey = _keyListeners.get(key);
+    if (perKey) perKey.forEach(fn => { try { fn(evt); } catch(e) {} });
+    _globalListeners.forEach(fn => { try { fn(evt); } catch(e) {} });
+  }
+
+  // dispatch(txType, payload): explicitly name and record a transaction.
+  // Optional — existing code that calls S.set() directly still works fine.
+  // Use in new code for self-documenting intent and audit trail clarity.
+  function dispatch(txType, payload) {
+    const def = TX_TYPES[txType];
+    if (!def) return;
+    try {
+      const sess = (typeof getSession === 'function') ? (getSession() || {}) : {};
+      const logs = S.get(K.AUDIT, []);
+      logs.unshift({
+        id:        uid(),
+        userId:    sess.id       || 'system',
+        username:  sess.username || 'system',
+        role:      sess.role     || 'admin',
+        action:    txType,
+        module:    'AccountingEngine',
+        newVal:    JSON.stringify(payload || null),
+        timestamp: new Date().toISOString(),
+      });
+      // Write audit directly to localStorage — bypass engine to prevent recursion
+      localStorage.setItem(K.AUDIT, JSON.stringify(logs.slice(0, 500)));
+    } catch(e) {}
+  }
+
+  // ── S.set wrapper ──
+  // All existing save paths (S.set) automatically flow through the engine.
+  // No call-site changes needed anywhere in the app.
+  const _origSet = S.set;
+  S.set = function(k, v) {
+    _origSet.call(this, k, v);   // original: write localStorage + mirror Firebase
+    _notify(k, v);               // engine: notify all subscribers for this key
+  };
+
+  return { subscribe, dispatch, TX_TYPES, FINANCIAL_KEYS };
+})();
+window.AccountingEngine = AccountingEngine;
+
+// ── useAccountingData — reactive hook wired to AccountingEngine ───────────────
+// Drop-in replacement for: const [x, setX] = useState(() => S.get(key, def))
+// Automatically re-reads from localStorage whenever AccountingEngine fires for key.
+//
+// Usage (replaces manual useState + useEffect pattern):
+//   const payments = useAccountingData(K.PAY, []);
+//
+// Benefits over raw useState:
+//   - Cross-module reactivity: changes in Fee Collection are instantly visible
+//     in Student Ledger, Dashboard, Statements, P&L — without a page refresh.
+//   - Consistent read path: always reads from localStorage (the primary store).
+//   - Safe: read-only from module perspective; writes still go via S.set.
+//
+function useAccountingData(key, defaultVal) {
+  const [data, setData] = useState(() => S.get(key, defaultVal));
+  useEffect(() => {
+    setData(S.get(key, defaultVal));              // re-sync on mount
+    return AccountingEngine.subscribe(key, () => {
+      setData(S.get(key, defaultVal));            // re-sync on every write to this key
+    });
+  }, [key]);
+  return data;
+}
+
 // Always return current time — never stale (getter, not static value)
 Object.defineProperty(window, 'NOW', { get: () => new Date(), configurable: true });
 Object.defineProperty(window, '_NOW', { get: () => new Date() });
