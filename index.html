@@ -2015,9 +2015,15 @@ function Dashboard({ setPage }) {
           <span className="text-xs text-amber-800 font-semibold">Viewing historical statement — {MONTH_NAMES[selDashMonth]} {selDashYear}. Click "↻ Current Month" to return to live view.</span>
         </div>
       )}
+      {/* ── Section label strip — Income | Expenses | Net Position ── */}
+      <div className="grid grid-cols-3 gap-3 mb-1">
+        <div className="flex items-center gap-1.5 px-1"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"/><span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Income</span></div>
+        <div className="flex items-center gap-1.5 px-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block"/><span className="text-xs font-bold text-red-600 uppercase tracking-wide">Expenses</span></div>
+        <div className="flex items-center gap-1.5 px-1"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block"/><span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Net Position</span></div>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         {/* Income Heads */}
-        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4">
           <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest mb-3">💰 Income Heads</p>
           <div className="space-y-2.5 text-sm">
             <div className="flex justify-between items-center">
@@ -2062,7 +2068,7 @@ function Dashboard({ setPage }) {
         </div>
 
         {/* Expense Heads */}
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
+        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4">
           <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-3">🧾 Expense Heads</p>
           <div className="space-y-2.5 text-sm">
             {cbGeneralH > 0 && (
@@ -2117,7 +2123,7 @@ function Dashboard({ setPage }) {
         </div>
 
         {/* Net Position */}
-        <div className={`border-2 rounded-2xl p-4 ${netPosition >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-300'}`}>
+        <div className={`border-2 rounded-2xl p-4 ${netPosition >= 0 ? 'bg-blue-50 border-blue-300' : 'bg-red-50 border-red-400'}`}>
           <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${netPosition >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
             📊 Net Position
           </p>
@@ -2208,7 +2214,10 @@ function Dashboard({ setPage }) {
 
       {/* ── Owner Equity Widget ── */}
       <div className="mb-6">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">🏦 Owner / Partner Equity (All-Time)</p>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"/><span className="text-xs font-bold text-purple-700 uppercase tracking-wide">Owner / Partner Equity (All-Time)</span></div>
+          <div className="flex-1 h-px bg-gray-200"/>
+        </div>
         <div className={`rounded-2xl border-2 p-5 ${plOwnerEquity>=0?'bg-emerald-50 border-emerald-300':'bg-red-50 border-red-300'}`}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
@@ -2235,9 +2244,10 @@ function Dashboard({ setPage }) {
         </div>
       </div>
 
-      {/* ── Quick Stats Grid ── */}
-      <div className="mb-2">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">⚡ Quick Stats</p>
+      {/* ── Account Balances + Quick Stats ── */}
+      <div className="mb-2 flex items-center gap-3">
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block"/><span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Account Balances &amp; Stats</span></div>
+        <div className="flex-1 h-px bg-gray-200"/>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {stats.map(s => {
@@ -3525,48 +3535,55 @@ function Fees() {
                   <>
                     {/* Summary bar */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                      {/* Fee Collected */}
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-                        <p className="text-xs text-emerald-600 font-semibold uppercase mb-1">💰 Fee Collected</p>
-                        <p className="text-lg font-extrabold text-emerald-700">Rs. {totalCollected.toLocaleString()}</p>
+
+                      {/* PRIMARY CARD 1 — Fee Collected (GREEN) */}
+                      <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl px-4 py-3">
+                        <p className="text-xs text-emerald-600 font-bold uppercase tracking-wide mb-1">💰 Fee Collected</p>
+                        <p className="text-xl font-extrabold text-emerald-700">Rs. {totalCollected.toLocaleString()}</p>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">This month · fee only</p>
                         {totalAF > 0 && <p className="text-xs text-purple-500 mt-0.5">+ AF: Rs. {totalAF.toLocaleString()}</p>}
                         {totalBooksCol > 0 && <p className="text-xs text-amber-500 mt-0.5">+ Books: Rs. {totalBooksCol.toLocaleString()}</p>}
-                        {(totalAF > 0 || totalBooksCol > 0) && <p className="text-xs font-bold text-emerald-700 mt-1">Grand: Rs. {grandCollected.toLocaleString()}</p>}
+                        {(totalAF > 0 || totalBooksCol > 0) && (
+                          <div className="mt-1.5 border-t border-emerald-200 pt-1">
+                            <p className="text-xs font-bold text-emerald-700">Total: Rs. {grandCollected.toLocaleString()}</p>
+                          </div>
+                        )}
                       </div>
-                      {/* Outstanding — Monthly + All-Time */}
-                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                        <p className="text-xs text-red-500 font-semibold uppercase mb-1">⚠️ This Month Unpaid</p>
-                        <p className="text-lg font-extrabold text-red-600">Rs. {totalOutstanding.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Fee Due: Rs. {totalNetDue.toLocaleString()}</p>
-                        <p className="text-xs text-emerald-600 mt-0.5">− Collected: Rs. {totalCollected.toLocaleString()}</p>
-                        {/* All-time balance — from global engine (matches Dashboard exactly) */}
-                        <div className="border-t border-red-200 mt-2 pt-1.5">
-                          <p className="text-xs text-orange-600 font-bold">📊 All-Time Balance Due:</p>
-                          <p className="text-sm font-extrabold text-orange-700">Rs. {allTimeBalance.toLocaleString()}</p>
-                          <p className="text-xs text-gray-400">Same as Dashboard ✓</p>
-                        </div>
-                      </div>
-                      {/* Total Fee Due */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-                        <p className="text-xs text-blue-500 font-semibold uppercase mb-1">📋 Total Fee Due</p>
-                        <p className="text-lg font-extrabold text-blue-700">Rs. {totalNetDue.toLocaleString()}</p>
+
+                      {/* PRIMARY CARD 2 — This Month Due (RED) */}
+                      <div className="bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3">
+                        <p className="text-xs text-red-600 font-bold uppercase tracking-wide mb-1">📅 This Month Due</p>
+                        <p className="text-xl font-extrabold text-red-600">Rs. {totalNetDue.toLocaleString()}</p>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">Current month fee only</p>
                         <p className="text-xs text-gray-500 mt-0.5">Fee: Rs. {totalFeeDue.toLocaleString()}</p>
-                        {totalDiscount > 0
-                          ? <><p className="text-xs text-red-400 mt-0.5">− Discount: Rs. {totalDiscount.toLocaleString()}</p>
-                            <p className="text-xs font-bold text-blue-700 mt-1">Net: Rs. {totalNetDue.toLocaleString()}</p></>
-                          : <p className="text-xs text-gray-400 mt-0.5">No discount applied</p>
-                        }
+                        {totalDiscount > 0 && (
+                          <p className="text-xs text-emerald-600 mt-0.5">− Discount: Rs. {totalDiscount.toLocaleString()}</p>
+                        )}
+                        <p className="text-xs text-gray-300 mt-1 italic">No prev. balance · No AF · No books</p>
                       </div>
-                      {/* Collection Rate */}
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                        <p className="text-xs text-amber-600 font-semibold uppercase mb-1">📊 Collection Rate</p>
-                        <p className="text-lg font-extrabold text-amber-700">
+
+                      {/* PRIMARY CARD 3 — Grand Outstanding (BLUE) */}
+                      <div className="bg-blue-50 border-2 border-blue-300 rounded-xl px-4 py-3">
+                        <p className="text-xs text-blue-600 font-bold uppercase tracking-wide mb-1">📊 Grand Outstanding</p>
+                        <p className="text-xl font-extrabold text-blue-700">Rs. {allTimeBalance.toLocaleString()}</p>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">All-time balance due</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Prev. balance + current fee</p>
+                        <p className="text-xs text-gray-500 mt-0.5">+ AF + books + opening bal</p>
+                        <p className="text-xs font-semibold text-blue-500 mt-1">Matches Dashboard ✓</p>
+                      </div>
+
+                      {/* PRIMARY CARD 4 — Collection Rate (YELLOW) */}
+                      <div className="bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3">
+                        <p className="text-xs text-amber-700 font-bold uppercase tracking-wide mb-1">📈 Collection Rate</p>
+                        <p className="text-xl font-extrabold text-amber-700">
                           {totalNetDue > 0 ? Math.round((totalCollected / totalNetDue) * 100) : 0}%
                         </p>
-                        <p className="text-xs text-emerald-600 mt-0.5">Paid: {status.filter(r=>r.pay).length} students</p>
-                        <p className="text-xs text-red-400 mt-0.5">Unpaid: {status.filter(r=>!r.pay).length} students</p>
-                        <p className="text-xs font-bold text-amber-700 mt-1">Total: {status.length} students</p>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">This month</p>
+                        <p className="text-xs text-emerald-600 mt-0.5">✓ Paid: {status.filter(r=>r.pay).length} students</p>
+                        <p className="text-xs text-red-500 mt-0.5">✗ Unpaid: {status.filter(r=>!r.pay).length} students</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Total: {status.length}</p>
                       </div>
+
                     </div>
 
                     <Card className="overflow-hidden">
