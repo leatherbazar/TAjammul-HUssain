@@ -186,6 +186,13 @@ OTHER_COLLECTIONS.forEach(name => {
   models[name] = mongoose.model(name, flex())
 })
 
+// ── Attachment (Cloudinary file refs) ────────────────────────────────────────
+const Attachment = mongoose.model('Attachment', new mongoose.Schema({
+  id: String, url: String, publicId: String, originalName: String,
+  fileType: String, size: Number, refId: String, refType: String,
+  uploadedBy: String, folder: String,
+}, { strict: false, timestamps: true }))
+
 // ── User ──────────────────────────────────────────────────────────────────────
 const User = mongoose.model('User', new mongoose.Schema({
   id:            { type: String, index: true },
@@ -2071,12 +2078,7 @@ app.post('/api/upload', (req, res, next) => {
     })
 
     // Save attachment record to DB
-    const attachment = await models['attachments'] ? null : null
-    const att = await mongoose.model('Attachment', new mongoose.Schema({
-      id: String, url: String, publicId: String, originalName: String,
-      fileType: String, size: Number, refId: String, refType: String,
-      uploadedBy: String, folder: String,
-    }, { strict: false, timestamps: true })).create({
+    await Attachment.create({
       id: Date.now().toString(),
       url: result.secure_url,
       publicId: result.public_id,
@@ -2105,7 +2107,6 @@ app.post('/api/upload', (req, res, next) => {
 app.get('/api/attachments', async (req, res) => {
   try {
     const { refId, refType } = req.query
-    const Attachment = mongoose.models.Attachment || mongoose.model('Attachment', new mongoose.Schema({}, { strict: false, timestamps: true }))
     const query = {}
     if (refId) query.refId = refId
     if (refType) query.refType = refType
@@ -2119,7 +2120,6 @@ app.delete('/api/attachments/:publicId', async (req, res) => {
   try {
     const publicId = decodeURIComponent(req.params.publicId)
     await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' })
-    const Attachment = mongoose.models.Attachment || mongoose.model('Attachment', new mongoose.Schema({}, { strict: false, timestamps: true }))
     await Attachment.findOneAndDelete({ publicId })
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
