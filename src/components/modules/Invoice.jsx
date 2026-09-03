@@ -339,14 +339,49 @@ function GenerateDNModal({ invoice, existingDNs, onGenerate, onCancel }) {
   const [vehicleNo, setVehicleNo] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
+  // Rule 4: manufacturing tolerance %
+  const [tolerance, setTolerance] = useState(5)
+
+  const toleranceInfo = dnItems.map(item => {
+    const remaining = item.invoicedQty - item.delivered
+    const dnQty = parseInt(item.dnQty) || 0
+    const shortfall = remaining - dnQty
+    const pct = remaining > 0 ? (shortfall / remaining) * 100 : 0
+    return { shortfall, pct, withinTolerance: shortfall > 0 && pct <= tolerance, overDelivery: dnQty > remaining }
+  })
+
+  const allWithinTolerance = dnItems.length > 0 && dnItems.every((item, i) => {
+    const dnQty = parseInt(item.dnQty) || 0
+    const remaining = item.invoicedQty - item.delivered
+    return dnQty >= remaining || toleranceInfo[i].withinTolerance
+  })
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal modal-lg fade-in" style={{ maxWidth: 720 }} onClick={e => e.stopPropagation()}>
+      <div className="modal modal-lg fade-in" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
         <div className="modal-title">🚚 Generate Delivery Note from {invoice.number}</div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-          Adjust delivery quantities — remaining qty is pre-filled based on previous deliveries.
+          Adjust delivery quantities — remaining qty is pre-filled. Use tolerance to auto-close minor shortfalls.
         </p>
+
+        {/* Rule 4: Tolerance setting */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)', whiteSpace: 'nowrap' }}>⚖️ Tolerance ±</span>
+          <input
+            type="number" min={0} max={20} step={0.5}
+            className="input"
+            style={{ width: 72, textAlign: 'center', fontWeight: 700, borderColor: 'var(--blue)' }}
+            value={tolerance}
+            onChange={e => setTolerance(parseFloat(e.target.value) || 0)}
+          />
+          <span style={{ fontSize: 13, color: 'var(--blue)' }}>%</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>Short deliveries within this % of remaining qty will auto-close the balance.</span>
+          {allWithinTolerance && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap', padding: '3px 10px', background: 'rgba(34,197,94,0.12)', borderRadius: 6 }}>
+              ✅ Will auto-close
+            </span>
+          )}
+        </div>
 
         <div className="form-grid form-grid-3" style={{ marginBottom: 14 }}>
           <div className="input-group">
@@ -372,31 +407,54 @@ function GenerateDNModal({ invoice, existingDNs, onGenerate, onCancel }) {
                 <th style={{ textAlign: 'center', color: 'var(--green)' }}>Delivered</th>
                 <th style={{ textAlign: 'center', color: 'var(--red)' }}>Remaining</th>
                 <th style={{ textAlign: 'center', color: 'var(--amber)' }}>This Delivery ✏️</th>
+                <th style={{ textAlign: 'center' }}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {dnItems.map(item => (
-                <tr key={item.id}>
-                  <td style={{ fontWeight: 600 }}>{item.description}</td>
-                  <td style={{ textAlign: 'center' }}>{item.invoicedQty}</td>
-                  <td style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>{item.delivered}</td>
-                  <td style={{ textAlign: 'center', color: 'var(--red)', fontWeight: 700 }}>{item.invoicedQty - item.delivered}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <input
-                      type="number"
-                      className="input"
-                      style={{ width: 90, borderColor: 'var(--amber)', background: 'rgba(245,158,11,0.1)', textAlign: 'center', fontWeight: 800 }}
-                      min="0"
-                      max={item.invoicedQty - item.delivered}
-                      value={item.dnQty}
-                      onChange={e => setDnItems(prev => prev.map(i => i.id === item.id ? { ...i, dnQty: e.target.value } : i))}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {dnItems.map((item, idx) => {
+                const tol = toleranceInfo[idx]
+                const dnQty = parseInt(item.dnQty) || 0
+                const remaining = item.invoicedQty - item.delivered
+                const isFull = dnQty >= remaining
+                return (
+                  <tr key={item.id}>
+                    <td style={{ fontWeight: 600 }}>{item.description}</td>
+                    <td style={{ textAlign: 'center' }}>{item.invoicedQty}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>{item.delivered}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--red)', fontWeight: 700 }}>{remaining}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="number"
+                        className="input"
+                        style={{ width: 90, borderColor: tol.withinTolerance ? 'var(--green)' : 'var(--amber)', background: tol.withinTolerance ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', textAlign: 'center', fontWeight: 800 }}
+                        min="0"
+                        value={item.dnQty}
+                        onChange={e => setDnItems(prev => prev.map(i => i.id === item.id ? { ...i, dnQty: e.target.value } : i))}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'center', fontSize: 11 }}>
+                      {isFull ? (
+                        <span style={{ color: 'var(--green)', fontWeight: 700 }}>✅ Full</span>
+                      ) : tol.withinTolerance ? (
+                        <span style={{ color: 'var(--blue)', fontWeight: 700 }}>⚖️ -{tol.shortfall} ({tol.pct.toFixed(1)}%)</span>
+                      ) : tol.overDelivery ? (
+                        <span style={{ color: 'var(--amber)', fontWeight: 700 }}>⚠️ Over</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Partial</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
+
+        {allWithinTolerance && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', marginBottom: 14, fontSize: 13, color: 'var(--green)', fontWeight: 700 }}>
+            ✅ All items within {tolerance}% tolerance — balance will auto-close on creation.
+          </div>
+        )}
 
         <div className="input-group" style={{ marginBottom: 14 }}>
           <label className="input-label">Notes</label>
@@ -422,6 +480,8 @@ function GenerateDNModal({ invoice, existingDNs, onGenerate, onCancel }) {
                 color: i.color || '',
               })),
               status: 'pending',
+              tolerancePct: tolerance,
+              autoClose: allWithinTolerance,
             })
           }}>
             ✅ Create Delivery Note
@@ -1063,17 +1123,20 @@ export default function Invoices() {
                     )}
                   </td>
                   <td>
-                    {/* Status dropdown — requires master code to change */}
+                    {/* Status dropdown — paid/partial opens payment modal (Rule 3); others need master code */}
                     <select
                       className={`badge badge-${inv.status}`}
                       value={inv.status}
                       style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontWeight: 700, fontSize: 11, padding: '3px 6px', borderRadius: 6 }}
                       onChange={e => {
                         const newStatus = e.target.value
-                        if (newStatus !== inv.status) {
+                        if (newStatus === inv.status) return
+                        e.target.value = inv.status // reset visually
+                        if (newStatus === 'paid' || newStatus === 'partial') {
+                          // Rule 3: open payment modal instead of blindly setting status
+                          setPayInvoice(inv)
+                        } else {
                           setMasterAction({ type: 'status', id: inv.id, newStatus, number: inv.number })
-                          // Reset select visually (master code will actually apply it)
-                          e.target.value = inv.status
                         }
                       }}
                     >
@@ -1130,7 +1193,18 @@ export default function Invoices() {
         <RecordPaymentModal
           invoice={payInvoice}
           onClose={() => setPayInvoice(null)}
-          onSuccess={async () => { setPayInvoice(null); await refreshData() }}
+          onSuccess={async () => {
+            setPayInvoice(null)
+            await refreshData()
+            // Rule 1 frontend: notify if all DNs are now delivered
+            try {
+              const res = await fetch(`/api/delivery-notes/sync-check?invoiceRef=${encodeURIComponent(payInvoice.number)}`)
+              if (res.ok) {
+                const { allDelivered, dnCount } = await res.json()
+                if (allDelivered && dnCount > 0) toast.success(`All ${dnCount} delivery note(s) for ${payInvoice.number} auto-marked as delivered.`)
+              }
+            } catch (_) {}
+          }}
         />
       )}
 

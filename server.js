@@ -741,7 +741,38 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
       notes:       notes || '',
     })
 
+    // ── Rule 1: if now fully paid, auto-set all linked Delivery Notes → delivered ─
+    if (newStatus === 'paid' && invoice.number) {
+      await models.deliveryNotes.updateMany(
+        { invoiceRef: invoice.number },
+        { $set: { status: 'delivered' } }
+      )
+    }
+
     res.json({ ok: true, invoice: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Rule 1b: when a DN status → delivered, check if all DNs for its invoice are
+//    delivered and auto-close the invoice delivery tracking ─────────────────────
+app.post('/api/delivery-notes/:id/sync-invoice', async (req, res) => {
+  try {
+    const dn = await models.deliveryNotes.findOne({ id: req.params.id }).lean()
+    if (!dn?.invoiceRef) return res.json({ ok: true, synced: false })
+    const allDNs = await models.deliveryNotes.find({ invoiceRef: dn.invoiceRef }).lean()
+    const allDelivered = allDNs.length > 0 && allDNs.every(d => d.status === 'delivered')
+    res.json({ ok: true, synced: allDelivered, allDelivered, dnCount: allDNs.length })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET version — called by frontend after payment to check if all DNs delivered
+app.get('/api/delivery-notes/sync-check', async (req, res) => {
+  try {
+    const { invoiceRef } = req.query
+    if (!invoiceRef) return res.json({ allDelivered: false, dnCount: 0 })
+    const allDNs = await models.deliveryNotes.find({ invoiceRef }).lean()
+    const allDelivered = allDNs.length > 0 && allDNs.every(d => d.status === 'delivered')
+    res.json({ allDelivered, dnCount: allDNs.length })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

@@ -277,9 +277,21 @@ export default function DeliveryNotes() {
                                                       { background: 'rgba(239,68,68,0.18)',  color: '#ef4444',  border: '1px solid rgba(239,68,68,0.4)'   })
                     }}
                     value={n.status}
-                    onChange={e => {
-                      updateRecord('deliveryNotes', n.id, { ...n, status: e.target.value })
-                      toast.success(`Status → ${e.target.value}`)
+                    onChange={async e => {
+                      const newStatus = e.target.value
+                      await updateRecord('deliveryNotes', n.id, { ...n, status: newStatus })
+                      toast.success(`Status → ${newStatus}`)
+                      // Rule 1b: if marked delivered, check if all DNs for this invoice are done
+                      if (newStatus === 'delivered' && n.invoiceRef) {
+                        try {
+                          const res = await fetch(`/api/delivery-notes/sync-check?invoiceRef=${encodeURIComponent(n.invoiceRef)}`)
+                          if (res.ok) {
+                            const { allDelivered, dnCount } = await res.json()
+                            if (allDelivered && dnCount > 0)
+                              toast.success(`All ${dnCount} delivery note(s) for invoice ${n.invoiceRef} are now delivered! Consider marking the invoice as paid.`, { duration: 5000 })
+                          }
+                        } catch (_) {}
+                      }
                     }}
                   >
                     {['pending', 'dispatched', 'delivered', 'returned'].map(s => <option key={s}>{s}</option>)}
