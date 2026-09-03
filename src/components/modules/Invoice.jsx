@@ -597,6 +597,11 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
           📋 Converted from Quotation <strong style={{ color: 'var(--blue)' }}>{fromQuotation.number}</strong> — All items are fully editable before saving.
         </div>
       )}
+      {form.supplyOrderRef && !fromQuotation && (
+        <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', marginBottom: 16, fontSize: 13 }}>
+          🛒 Items loaded from Supply Order <strong style={{ color: '#818cf8' }}>{form.supplyOrderRef}</strong> — Add client details and save.
+        </div>
+      )}
 
       {/* ── Smart Source Loader: pull items from SO / PO / Quotation with markup ── */}
       {!fromQuotation && (
@@ -940,6 +945,21 @@ export default function Invoices() {
     }
   }, [])
 
+  // Pick up Supply Order → Invoice navigation
+  const [fromSO, setFromSO] = useState(null)
+  useEffect(() => {
+    const pending = sessionStorage.getItem('tat_so_to_invoice')
+    if (pending) {
+      try {
+        const so = JSON.parse(pending)
+        sessionStorage.removeItem('tat_so_to_invoice')
+        setFromSO(so)
+        setSelected(null)
+        setView('new')
+      } catch (_) {}
+    }
+  }, [])
+
   const invoices = useMemo(() => {
     let list = data.invoices || []
     if (search) list = list.filter(i =>
@@ -1058,10 +1078,17 @@ export default function Invoices() {
           </button>
         </div>
         <InvoiceForm
-          initial={selected}
+          initial={selected || (fromSO ? {
+            supplyOrderRef: fromSO.supplyOrderRef,
+            items: fromSO.items,
+            notes: fromSO.notes,
+            clientName: '', clientContact: '', accountHeadID: '',
+            date: new Date().toISOString().slice(0, 10),
+            dueDate: '', taxRate: 0, advancePaid: 0, status: 'unpaid', stealthPrint: false,
+          } : null)}
           fromQuotation={fromQuotation}
           onSave={handleSave}
-          onCancel={() => { setView('list'); setSelected(null); setFromQuotation(null) }}
+          onCancel={() => { setView('list'); setSelected(null); setFromQuotation(null); setFromSO(null) }}
           onOpenDN={(inv) => setDnModal(inv)}
         />
         {dnModal && (

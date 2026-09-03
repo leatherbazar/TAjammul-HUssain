@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { fmtDate } from '../../utils/fmt'
@@ -235,6 +235,21 @@ export default function Quotations() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState('all')
+  const [fromSO, setFromSO] = useState(null)
+
+  // Pick up Supply Order → Quotation navigation
+  useEffect(() => {
+    const pending = sessionStorage.getItem('tat_so_to_quotation')
+    if (pending) {
+      try {
+        const so = JSON.parse(pending)
+        sessionStorage.removeItem('tat_so_to_quotation')
+        setFromSO(so)
+        setSelected(null)
+        setView('new')
+      } catch (_) {}
+    }
+  }, [])
 
   // Unique client list from quotations for the dropdown
   const clientList = useMemo(() => {
@@ -348,7 +363,24 @@ export default function Quotations() {
           <h2>📋 <span>{view === 'new' ? 'New Quotation' : 'Edit Quotation'}</span></h2>
           <button className="btn btn-secondary btn-sm" onClick={() => { setView('list'); setSelected(null) }}>← Back</button>
         </div>
-        <QuotationForm initial={selected} onSave={handleSave} onCancel={() => { setView('list'); setSelected(null) }} clients={data.users?.clients || []} />
+        {fromSO && !selected && (
+          <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', marginBottom: 16, fontSize: 13 }}>
+            🛒 Items loaded from Supply Order <strong style={{ color: '#818cf8' }}>{fromSO.supplyOrderRef}</strong> — Add client details and save.
+          </div>
+        )}
+        <QuotationForm
+          initial={selected || (fromSO ? {
+            supplyOrderRef: fromSO.supplyOrderRef,
+            items: fromSO.items,
+            notes: fromSO.notes,
+            clientName: '', clientContact: '', clientAddress: '',
+            date: new Date().toISOString().slice(0, 10),
+            taxRate: 0, status: 'draft',
+          } : null)}
+          onSave={handleSave}
+          onCancel={() => { setView('list'); setSelected(null); setFromSO(null) }}
+          clients={data.users?.clients || []}
+        />
       </div>
     )
   }

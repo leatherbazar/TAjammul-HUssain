@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { fmtDate } from '../../utils/fmt'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
@@ -361,6 +362,47 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
 
 export default function SupplyOrders({ isEmployee = false }) {
   const { data, addRecord, updateRecord, deleteRecord, currentUser, refreshData, currentCompany, nextDocNumber } = useApp()
+  const navigate = useNavigate()
+
+  const goToInvoice = (o) => {
+    const payload = {
+      supplyOrderRef: o.number,
+      supplyOrderId: o.id,
+      items: (o.items || []).map(i => ({
+        id: Date.now() + Math.random(),
+        description: i.description || '',
+        color: i.color || '',
+        qty: i.qty || 1,
+        unitPrice: parseFloat(i.marketPrice) || 0,
+        useMatrix: i.useMatrix || false,
+        matrixRows: i.matrixRows || [],
+      })),
+      notes: o.notes || `From Supply Order ${o.number}`,
+    }
+    sessionStorage.setItem('tat_so_to_invoice', JSON.stringify(payload))
+    navigate('/admin/invoices')
+    toast('🧾 Opening Invoice — items loaded from SO ' + o.number, { duration: 4000 })
+  }
+
+  const goToQuotation = (o) => {
+    const payload = {
+      supplyOrderRef: o.number,
+      items: (o.items || []).map(i => ({
+        id: Date.now() + Math.random(),
+        description: i.description || '',
+        color: i.color || '',
+        qty: i.qty || 1,
+        unitPrice: parseFloat(i.marketPrice) || 0,
+        useMatrix: i.useMatrix || false,
+        matrixRows: i.matrixRows || [],
+      })),
+      notes: o.notes || `From Supply Order ${o.number}`,
+    }
+    sessionStorage.setItem('tat_so_to_quotation', JSON.stringify(payload))
+    navigate('/admin/quotations')
+    toast('📋 Opening Quotation — items loaded from SO ' + o.number, { duration: 4000 })
+  }
+
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
@@ -486,6 +528,20 @@ export default function SupplyOrders({ isEmployee = false }) {
                     <button className="btn btn-secondary btn-xs" onClick={() => { if (isEmployee) { setSelected(o); setView('edit') } else { setMasterAction({ type: 'edit', item: o }) } }}>✏️</button>
                     {!isEmployee && <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: o.id })}>🗑️</button>}
                     <button className="btn btn-secondary btn-xs" onClick={() => exportSupplyOrderPDF(o, currentCompany)} title="Export PDF">📄</button>
+                    {!isEmployee && (
+                      <button className="btn btn-xs" title="Create Invoice from this SO"
+                        style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', color: '#818cf8', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        onClick={() => goToInvoice(o)}>
+                        🧾 Invoice
+                      </button>
+                    )}
+                    {!isEmployee && (
+                      <button className="btn btn-xs" title="Create Quotation from this SO"
+                        style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        onClick={() => goToQuotation(o)}>
+                        📋 Quote
+                      </button>
+                    )}
                     {!isEmployee && !o.purchaseRef && o.status !== 'cancelled' && (
                       <button
                         className="btn btn-xs"
