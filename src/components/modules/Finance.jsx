@@ -19,13 +19,26 @@ function WalletManager() {
 
   const walletKeys = { Cash: 'cash', Bank: 'bank', JazzCash: 'jazzcash', EasyPaisa: 'easypaisa' }
 
+  // Compute live balance from Day Book entries (opening balance + credits - debits)
+  const walletBalances = useMemo(() => {
+    const result = {}
+    for (const [w, key] of Object.entries(walletKeys)) {
+      const opening = data.wallets?.[key] || 0
+      const entries = (data.dayBook || []).filter(e => e.wallet === w)
+      const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
+      const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
+      result[key] = opening + totalCredit - totalDebit
+    }
+    return result
+  }, [data.wallets, data.dayBook])
+
   return (
     <div className="section-box">
       <div className="section-title">👛 Wallets & Cash Balances</div>
       <div className="wallet-cards">
         {WALLETS.map(w => {
           const key = walletKeys[w]
-          const bal = data.wallets?.[key] || 0
+          const bal = walletBalances[key] || 0
           return (
             <div key={w} className="wallet-card glass" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: 16 }}>
               <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
