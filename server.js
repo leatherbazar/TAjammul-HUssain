@@ -735,8 +735,8 @@ app.post('/api/invoices', async (req, res) => {
         accountHeadID,
         contactName:   req.body.clientName,
         date:          req.body.date,
-        description:   `Invoice: ${req.body.number || ''}`,
-        documentRef:   req.body.number,
+        description:   `Invoice: ${safeNumber}`,
+        documentRef:   safeNumber,
         documentType:  'invoice',
         debit:         parseFloat(req.body.total) || 0, // client owes us
         credit:        0,

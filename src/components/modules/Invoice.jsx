@@ -569,9 +569,7 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
   const handleSave = async () => {
     if (!form.clientName) { toast.error('Client name required.'); return }
     if (form.items.length === 0) { toast.error('Add at least one item.'); return }
-    if (!form.accountHeadID) {
-      toast('⚠️ No client account linked — ledger will not update.', { duration: 4000 })
-    }
+    // accountHeadID will be auto-registered on the server if missing — no warning needed
     setSaving(true)
     try {
       const num = form.number || await nextInvoiceNumber()
