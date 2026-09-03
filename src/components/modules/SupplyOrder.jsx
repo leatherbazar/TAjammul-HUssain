@@ -34,8 +34,74 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
     finally { setSaving(false) }
   }
 
+  // ── Load from Quotation / Invoice ─────────────────────────────────────────
+  const [srcType, setSrcType] = useState('')
+  const [srcId,   setSrcId]   = useState('')
+
+  const srcOptions = useMemo(() => {
+    if (srcType === 'quotation') return (data.quotations || []).map(r => ({ id: r.id, label: `${r.number} — ${r.clientName}`, record: r }))
+    if (srcType === 'invoice')   return (data.invoices   || []).map(r => ({ id: r.id, label: `${r.number} — ${r.clientName}`, record: r }))
+    return []
+  }, [srcType, data.quotations, data.invoices])
+
+  const applySource = () => {
+    const opt = srcOptions.find(o => o.id === srcId)
+    if (!opt) { toast.error('Select a document first.'); return }
+    const rec = opt.record
+    const items = (rec.items || []).map(i => {
+      const qty = i.useMatrix ? calcMatrixTotal(i.matrixRows || []) : (parseInt(i.qty) || 1)
+      return { id: Date.now() + Math.random(), description: i.description || '', color: i.color || '', qty, marketPrice: parseFloat(i.unitPrice) || 0, useMatrix: false, matrixRows: [], note: '' }
+    })
+    setForm(f => ({
+      ...f,
+      items,
+      title: f.title || [rec.number, rec.title || rec.subject].filter(Boolean).join(' — '),
+      notes: rec.notes || f.notes,
+      quotationRef: srcType === 'quotation' ? rec.number : f.quotationRef,
+      invoiceRef:   srcType === 'invoice'   ? rec.number : f.invoiceRef,
+    }))
+    toast.success(`Loaded ${items.length} item(s) from ${opt.label}`)
+    setSrcId('')
+  }
+
   return (
     <div>
+      {/* ── Load from Quotation / Invoice ── */}
+      {!initial && (
+        <div style={{ marginBottom: 16, padding: '14px 16px', borderRadius: 10, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 10 }}>📥 Load Items from Quotation or Invoice</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Source</label>
+              <select className="input" style={{ fontSize: 12, minWidth: 160 }} value={srcType} onChange={e => { setSrcType(e.target.value); setSrcId('') }}>
+                <option value="">— Select type —</option>
+                <option value="quotation">📋 Quotation</option>
+                <option value="invoice">🧾 Invoice</option>
+              </select>
+            </div>
+            {srcType && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 220 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Select Document</label>
+                <select className="input" style={{ fontSize: 12 }} value={srcId} onChange={e => setSrcId(e.target.value)}>
+                  <option value="">— Pick document —</option>
+                  {srcOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+            {srcType && (
+              <button className="btn btn-primary" style={{ background: 'var(--amber)', borderColor: 'var(--amber)', color: '#000', fontWeight: 700, alignSelf: 'flex-end' }} onClick={applySource}>
+                ✅ Load Items
+              </button>
+            )}
+          </div>
+          {(form.quotationRef || form.invoiceRef) && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)', fontFamily: 'monospace' }}>
+              ✓ Ref: {form.quotationRef || form.invoiceRef}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="section-box">
         <div className="section-title">🛒 Supply Order Details</div>
         <div className="form-grid form-grid-3">
@@ -108,7 +174,12 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
         {form.items.map((item, idx) => {
           const matrixQty = calcMatrixTotal(item.matrixRows)
           const qty = item.useMatrix && matrixQty > 0 ? matrixQty : (parseInt(item.qty) || 0)
-          const amount = qty * (parseFloat(item.marketPrice) || 0)
+          const marketPrice = parseFloat(item.marketPrice) || 0
+          const purchasePrice = parseFloat(item.purchasePrice) || 0
+          const amount = qty * marketPrice
+          const costAmount = qty * purchasePrice
+          const profitPct = marketPrice > 0 && purchasePrice > 0 ? ((marketPrice - purchasePrice) / marketPrice * 100).toFixed(1) : null
+          const profitAmt = amount - costAmount
 
           return (
             <div key={item.id} style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
@@ -134,18 +205,32 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                         <span style={{ fontSize: 11, color: 'var(--amber)', marginTop: 3 }}>↑ or matrix below</span>
                       )}
                     </div>
-                    <div style={{ flex: '1 1 140px' }}>
+                    <div style={{ flex: '1 1 130px' }}>
                       <label className="input-label">Market Price (PKR) {isEmployee && '← Update'}</label>
                       <input type="number" className="input" min="0" value={item.marketPrice}
                         onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
                         style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
                     </div>
-                    <div style={{ flex: '0 0 110px' }}>
-                      <label className="input-label">Amount</label>
-                      <div style={{ padding: '9px 12px', background: 'var(--glass)', borderRadius: 8, border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap' }}>
+                    <div style={{ flex: '1 1 130px' }}>
+                      <label className="input-label" style={{ color: 'var(--amber)' }}>Purchase/Cost Price</label>
+                      <input type="number" className="input" min="0" value={item.purchasePrice || ''}
+                        onChange={e => updateItem(item.id, 'purchasePrice', e.target.value)}
+                        placeholder="0" style={{ borderColor: 'rgba(245,158,11,0.4)' }} />
+                    </div>
+                    <div style={{ flex: '0 0 130px' }}>
+                      <label className="input-label">Selling Total</label>
+                      <div style={{ padding: '9px 12px', background: 'var(--glass)', borderRadius: 8, border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap', fontSize: 13 }}>
                         PKR {amount.toLocaleString()}
                       </div>
                     </div>
+                    {purchasePrice > 0 && marketPrice > 0 && (
+                      <div style={{ flex: '0 0 140px' }}>
+                        <label className="input-label" style={{ color: profitAmt >= 0 ? 'var(--green)' : '#f87171' }}>Profit Margin</label>
+                        <div style={{ padding: '9px 12px', background: profitAmt >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', borderRadius: 8, border: `1px solid ${profitAmt >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, fontWeight: 700, color: profitAmt >= 0 ? 'var(--green)' : '#f87171', whiteSpace: 'nowrap', fontSize: 13 }}>
+                          {profitPct}% · PKR {Math.abs(profitAmt).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                       <button
                         className={`btn btn-sm ${item.useMatrix ? 'btn-warning' : 'btn-secondary'}`}
@@ -268,6 +353,7 @@ export default function SupplyOrders({ isEmployee = false }) {
   const [masterAction, setMasterAction] = useState(null)
   const [receiveModal, setReceiveModal] = useState(null)
   const [search, setSearch] = useState('')
+  const [dupConfirm, setDupConfirm] = useState(null) // { pendingForm, existing[] }
 
   const orders = useMemo(() => {
     let list = data.supplyOrders || []
@@ -276,15 +362,45 @@ export default function SupplyOrders({ isEmployee = false }) {
     return list
   }, [data.supplyOrders, search, isEmployee, currentUser])
 
+  const createSO = async (f, forcePart = false) => {
+    const allOrders = data.supplyOrders || []
+    const titleLower = (f.title || '').trim().toLowerCase()
+
+    if (!forcePart) {
+      // Find existing SOs with same title (strip "/2", "/3" suffixes for comparison)
+      const duplicates = allOrders.filter(o => {
+        const base = (o.title || '').replace(/\/\d+$/, '').trim().toLowerCase()
+        return base === titleLower
+      })
+      if (duplicates.length > 0) {
+        setDupConfirm({ pendingForm: f, existing: duplicates })
+        return
+      }
+    }
+
+    // Find if any existing SO shares base title to compute part number
+    const allOrders2 = data.supplyOrders || []
+    const siblings = allOrders2.filter(o => {
+      const base = (o.title || '').replace(/\/\d+$/, '').trim().toLowerCase()
+      return base === titleLower
+    })
+
+    let num = await nextDocNumber('so')
+    if (siblings.length > 0) {
+      // Use same base number as the first sibling, suffix /2, /3...
+      const firstNum = siblings[0].number?.split('/')[0] || num
+      num = `${firstNum}/${siblings.length + 1}`
+    }
+
+    addRecord('supplyOrders', { ...f, number: num })
+    toast.success(`Supply order ${num} created!`)
+    setView('list'); setSelected(null)
+  }
+
   const handleSave = async (f) => {
     try {
-      if (selected) { updateRecord('supplyOrders', selected.id, f); toast.success('Order updated!') }
-      else {
-        const num = await nextDocNumber('so')
-        addRecord('supplyOrders', { ...f, number: num })
-        toast.success('Supply order created!')
-      }
-      setView('list'); setSelected(null)
+      if (selected) { updateRecord('supplyOrders', selected.id, f); toast.success('Order updated!'); setView('list'); setSelected(null) }
+      else { await createSO(f, false) }
     } catch (err) { throw err }
   }
 
@@ -390,6 +506,34 @@ export default function SupplyOrders({ isEmployee = false }) {
           onConfirm={(opts) => handleReceive(receiveModal, opts)}
           onCancel={() => setReceiveModal(null)}
         />
+      )}
+
+      {dupConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--card)', borderRadius: 14, padding: 28, maxWidth: 480, width: '90%', border: '1px solid rgba(245,158,11,0.4)' }}>
+            <div style={{ fontSize: 22, marginBottom: 8 }}>⚠️ Duplicate Supply Order</div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 12 }}>
+              You already created <strong>{dupConfirm.existing.length}</strong> order(s) with the same title:
+            </p>
+            <div style={{ background: 'rgba(245,158,11,0.08)', borderRadius: 8, padding: '10px 14px', marginBottom: 18 }}>
+              {dupConfirm.existing.map(o => (
+                <div key={o.id} style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--amber)', marginBottom: 4 }}>
+                  {o.number} — {o.title} <span style={{ color: 'var(--text-muted)' }}>({o.status})</span>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Do you want to create a <strong>Part {dupConfirm.existing.length + 1}</strong>? It will be numbered <strong>{dupConfirm.existing[0]?.number?.split('/')[0]}/{dupConfirm.existing.length + 1}</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setDupConfirm(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ background: 'var(--amber)', borderColor: 'var(--amber)', color: '#000', fontWeight: 700 }}
+                onClick={() => { const f = dupConfirm.pendingForm; setDupConfirm(null); createSO(f, true) }}>
+                ✅ Yes, Create Part {dupConfirm.existing.length + 1}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
