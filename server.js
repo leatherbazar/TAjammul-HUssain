@@ -39,8 +39,9 @@ if (!process.env.VERCEL) {
 // Reuse connection across Vercel serverless invocations
 if (mongoose.connection.readyState === 0) {
   mongoose.connect(process.env.DATABASE_URL, {
-    serverSelectionTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 30000,
+    socketTimeoutMS: 60000,
+    connectTimeoutMS: 30000,
   })
     .then(() => console.log('✅ MongoDB Atlas connected'))
     .catch(err => console.error('❌ MongoDB connection error:', err))
