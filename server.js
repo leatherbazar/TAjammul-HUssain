@@ -237,13 +237,22 @@ async function generateAccountHeadID(type) {
 }
 
 // ── Ledger trigger: create entry + update contact balance ─────────────────────
+// ── Single-source-of-truth balance: Σdebit − Σcredit across ALL ledger entries
+async function computeLiveBalance(accountHeadID) {
+  const agg = await Ledger.aggregate([
+    { $match: { accountHeadID } },
+    { $group: { _id: null, totalDebit: { $sum: '$debit' }, totalCredit: { $sum: '$credit' } } },
+  ])
+  return agg.length > 0 ? (agg[0].totalDebit - agg[0].totalCredit) : null
+}
+
 async function postLedgerEntry({ accountHeadID, contactName, date, description, documentRef, documentType, debit, credit }) {
   if (!accountHeadID) return
 
-  // Get last balance for this account
+  // Running balance for the per-row balance column in ledger statement view
   const lastEntry = await Ledger.findOne({ accountHeadID }).sort({ createdAt: -1 }).lean()
-  const prevBalance = lastEntry?.balance || 0
-  const newBalance = prevBalance + debit - credit
+  const prevRunning = lastEntry?.balance || 0
+  const runningBalance = prevRunning + debit - credit
 
   const entry = await Ledger.create({
     id: Date.now().toString(),
@@ -255,14 +264,18 @@ async function postLedgerEntry({ accountHeadID, contactName, date, description, 
     documentType,
     debit,
     credit,
-    balance: newBalance,
+    balance: runningBalance,
   })
 
-  // Update contact's currentBalance
-  await Contact.findOneAndUpdate(
-    { accountHeadID },
-    { $set: { currentBalance: newBalance } }
-  )
+  // ── Live aggregate balance (single source of truth) ─────────────────────────
+  // Computed AFTER the new entry is written so it's included in the sum
+  const liveBalance = await computeLiveBalance(accountHeadID)
+  if (liveBalance !== null) {
+    await Contact.findOneAndUpdate(
+      { accountHeadID },
+      { $set: { currentBalance: liveBalance } }
+    )
+  }
 
   return entry
 }
@@ -325,6 +338,8 @@ mongoose.connection.once('open', async () => {
       { upsert: true }
     )
     console.log('✅ Database defaults initialized')
+    // ── Repair any drifted currentBalance fields from live ledger on startup ───
+    setImmediate(repairAllContactBalances)
   } catch (err) {
     console.error('Init error:', err)
   }
@@ -406,12 +421,34 @@ app.get('/api/contacts/search', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// Get all contacts (with optional type filter)
+// Get all contacts — currentBalance is always computed live from Ledger
 app.get('/api/contacts', async (req, res) => {
   try {
     const filter = req.query.type ? { type: req.query.type } : {}
     const contacts = await Contact.find(filter).sort({ createdAt: -1 }).lean()
-    res.json({ contacts: contacts.map(fmtLean) })
+
+    // ── Live balance aggregation: single source of truth ─────────────────────
+    const accountIds = contacts.map(c => c.accountHeadID).filter(Boolean)
+    const ledgerAgg = await Ledger.aggregate([
+      { $match: { accountHeadID: { $in: accountIds } } },
+      { $group: {
+          _id: '$accountHeadID',
+          totalDebit:  { $sum: '$debit' },
+          totalCredit: { $sum: '$credit' },
+      }},
+    ])
+    const ledgerMap = {}
+    ledgerAgg.forEach(r => { ledgerMap[r._id] = r.totalDebit - r.totalCredit })
+
+    const enriched = contacts.map(c => {
+      // Use live ledger net if entries exist; else fall back to stored currentBalance
+      const liveBalance = c.accountHeadID && ledgerMap[c.accountHeadID] !== undefined
+        ? ledgerMap[c.accountHeadID]
+        : (c.currentBalance || 0)
+      return { ...c, currentBalance: liveBalance }
+    })
+
+    res.json({ contacts: enriched.map(fmtLean) })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -484,16 +521,39 @@ app.delete('/api/contacts/:id', async (req, res) => {
 //  LEDGER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Get ledger for an account
+// ── Repair: backfill currentBalance on all contacts from live ledger aggregate ─
+// Runs once at startup and is also callable via POST /api/ledger/repair-balances
+async function repairAllContactBalances() {
+  try {
+    const agg = await Ledger.aggregate([
+      { $group: { _id: '$accountHeadID', totalDebit: { $sum: '$debit' }, totalCredit: { $sum: '$credit' } } },
+    ])
+    await Promise.all(agg.map(r =>
+      Contact.findOneAndUpdate(
+        { accountHeadID: r._id },
+        { $set: { currentBalance: r.totalDebit - r.totalCredit } }
+      )
+    ))
+    console.log(`[repair] Resynced currentBalance for ${agg.length} account(s) from live ledger.`)
+  } catch (err) { console.error('[repair] Balance repair failed:', err.message) }
+}
+app.post('/api/ledger/repair-balances', async (_req, res) => {
+  await repairAllContactBalances()
+  res.json({ ok: true, message: 'Balance repair complete' })
+})
+
+// Get ledger for an account — balance is always live aggregate
 app.get('/api/ledger/:accountHeadID', async (req, res) => {
   try {
-    const entries = await Ledger.find({ accountHeadID: req.params.accountHeadID })
-      .sort({ createdAt: 1 }).lean()
-    const contact = await Contact.findOne({ accountHeadID: req.params.accountHeadID }).lean()
+    const { accountHeadID } = req.params
+    const entries = await Ledger.find({ accountHeadID }).sort({ createdAt: 1 }).lean()
+    const contact = await Contact.findOne({ accountHeadID }).lean()
+    const liveBalance = await computeLiveBalance(accountHeadID)
+    const currentBalance = liveBalance !== null ? liveBalance : (contact?.currentBalance || 0)
     res.json({
       contact: contact ? fmtLean(contact) : null,
       entries: entries.map(fmtLean),
-      currentBalance: contact?.currentBalance || 0,
+      currentBalance,
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
