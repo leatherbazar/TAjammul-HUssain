@@ -41,7 +41,6 @@ if (mongoose.connection.readyState === 0) {
   mongoose.connect(process.env.DATABASE_URL, {
     serverSelectionTimeoutMS: 10000,
     socketTimeoutMS: 45000,
-    bufferCommands: false,
   })
     .then(() => console.log('✅ MongoDB Atlas connected'))
     .catch(err => console.error('❌ MongoDB connection error:', err))
