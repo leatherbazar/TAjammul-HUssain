@@ -10,6 +10,8 @@ import toast from 'react-hot-toast'
 
 function DeliveryNoteForm({ initial, onSave, onCancel }) {
   const { data, currentUser } = useApp()
+  const [dnSourceType, setDnSourceType] = useState('')
+  const [dnSourceId, setDnSourceId] = useState('')
   const [form, setForm] = useState(initial || {
     clientName: '', clientContact: '', accountHeadID: '', deliveryAddress: '',
     invoiceRef: '',
@@ -52,6 +54,34 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
 
   const invoices = data.invoices || []
 
+  const dnSourceOptions = useMemo(() => {
+    if (dnSourceType === 'supplyOrder') return (data.supplyOrders || []).map(r => ({ id: r.id, label: `${r.number} — ${r.supplierName || r.title}`, record: r }))
+    if (dnSourceType === 'purchase')    return (data.purchases   || []).map(r => ({ id: r.id, label: `${r.number} — ${r.supplierName}`,  record: r }))
+    return []
+  }, [dnSourceType, data.supplyOrders, data.purchases])
+
+  const loadFromSource = () => {
+    const opt = dnSourceOptions.find(o => o.id === dnSourceId)
+    if (!opt) { toast.error('Select a document first.'); return }
+    const rec = opt.record
+    setForm(f => ({
+      ...f,
+      invoiceRef: rec.number || '',
+      clientName: f.clientName,  // keep client name — vendor docs don't have a client
+      items: (rec.items || []).map(i => ({
+        id: Date.now() + Math.random(),
+        description: i.description || '',
+        color: i.color || '',
+        useMatrix: false,
+        matrixRows: [],
+        qty: parseInt(i.qty) || 1,
+        note: '',
+      })),
+    }))
+    toast.success(`Loaded ${rec.items?.length || 0} item(s) from ${opt.label}`)
+    setDnSourceId('')
+  }
+
   return (
     <div>
       {/* Load from Invoice banner */}
@@ -81,6 +111,29 @@ function DeliveryNoteForm({ initial, onSave, onCancel }) {
             <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--green)', background: 'rgba(34,197,94,0.1)', padding: '3px 10px', borderRadius: 6 }}>
               ✓ Ref: {form.invoiceRef}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Load items from Supply Order / Purchase Order */}
+      {!initial && (
+        <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 10, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.25)', display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>📦 Load from Vendor Doc:</span>
+          <select className="input" style={{ maxWidth: 180, fontSize: 12 }} value={dnSourceType} onChange={e => { setDnSourceType(e.target.value); setDnSourceId('') }}>
+            <option value="">— Type —</option>
+            <option value="supplyOrder">Supply Order</option>
+            <option value="purchase">Purchase Order</option>
+          </select>
+          {dnSourceType && (
+            <select className="input" style={{ flex: 1, minWidth: 200, fontSize: 12 }} value={dnSourceId} onChange={e => setDnSourceId(e.target.value)}>
+              <option value="">— Select document —</option>
+              {dnSourceOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          )}
+          {dnSourceType && (
+            <button className="btn btn-primary" style={{ background: 'var(--amber)', borderColor: 'var(--amber)', color: '#000', fontWeight: 700 }} onClick={loadFromSource}>
+              ✅ Load Items
+            </button>
           )}
         </div>
       )}

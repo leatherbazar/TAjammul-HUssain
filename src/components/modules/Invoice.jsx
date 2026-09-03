@@ -594,6 +594,49 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
 
   const [saving, setSaving] = useState(false)
 
+  // ── Smart Source Loader (vendor→client price conversion) ─────────────────────
+  const [sourceType, setSourceType] = useState('')
+  const [sourceId, setSourceId] = useState('')
+  const [markupPct, setMarkupPct] = useState(10)
+
+  const sourceOptions = useMemo(() => {
+    if (sourceType === 'quotation')   return (data.quotations   || []).map(r => ({ id: r.id, label: `${r.number} — ${r.clientName}`,   record: r }))
+    if (sourceType === 'supplyOrder') return (data.supplyOrders || []).map(r => ({ id: r.id, label: `${r.number} — ${r.supplierName || r.title}`, record: r }))
+    if (sourceType === 'purchase')    return (data.purchases    || []).map(r => ({ id: r.id, label: `${r.number} — ${r.supplierName}`,  record: r }))
+    return []
+  }, [sourceType, data.quotations, data.supplyOrders, data.purchases])
+
+  const applySource = () => {
+    const opt = sourceOptions.find(o => o.id === sourceId)
+    if (!opt) { toast.error('Select a document first.'); return }
+    const rec = opt.record
+    const markup = parseFloat(markupPct) || 0
+    const items = (rec.items || []).map(i => {
+      let basePrice = 0
+      if (sourceType === 'quotation')   basePrice = parseFloat(i.unitPrice)   || 0
+      if (sourceType === 'supplyOrder') basePrice = parseFloat(i.marketPrice) || 0
+      if (sourceType === 'purchase')    basePrice = parseFloat(i.costPrice)   || 0
+      const sellingPrice = sourceType === 'quotation'
+        ? basePrice
+        : parseFloat((basePrice * (1 + markup / 100)).toFixed(2))
+      const qty = i.useMatrix ? calcMatrixTotal(i.matrixRows || []) : (parseInt(i.qty) || 1)
+      return { id: Date.now() + Math.random(), description: i.description || '', color: i.color || '', qty, unitPrice: sellingPrice, useMatrix: false, matrixRows: [] }
+    })
+    setForm(f => ({
+      ...f, items,
+      clientName:    rec.clientName    || f.clientName,
+      clientContact: rec.clientContact || f.clientContact,
+      clientAddress: rec.clientAddress || f.clientAddress,
+      accountHeadID: rec.accountHeadID || f.accountHeadID,
+      notes:         rec.notes || f.notes,
+      ...(sourceType === 'quotation'   && { quotationRef:    rec.number }),
+      ...(sourceType === 'supplyOrder' && { supplyOrderRef:  rec.number }),
+      ...(sourceType === 'purchase'    && { purchaseRef:     rec.number }),
+    }))
+    toast.success(`Loaded ${items.length} item(s) from ${opt.label}${sourceType !== 'quotation' ? ` (+${markup}% markup)` : ''}`)
+    setSourceId('')
+  }
+
   const handleSave = async () => {
     if (!form.clientName) { toast.error('Client name required.'); return }
     if (form.items.length === 0) { toast.error('Add at least one item.'); return }
@@ -623,6 +666,87 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
       {fromQuotation && (
         <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', marginBottom: 16, fontSize: 13 }}>
           📋 Converted from Quotation <strong style={{ color: 'var(--blue)' }}>{fromQuotation.number}</strong> — All items are fully editable before saving.
+        </div>
+      )}
+
+      {/* ── Smart Source Loader: pull items from SO / PO / Quotation with markup ── */}
+      {!fromQuotation && (
+        <div style={{ marginBottom: 16, padding: '14px 16px', borderRadius: 10, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.25)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 10 }}>
+            📥 Load Items from Existing Document
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {/* Source type */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Source Type</label>
+              <select className="input" style={{ fontSize: 12 }} value={sourceType} onChange={e => { setSourceType(e.target.value); setSourceId('') }}>
+                <option value="">— Select type —</option>
+                <option value="quotation">📋 Quotation</option>
+                <option value="supplyOrder">📦 Supply Order</option>
+                <option value="purchase">🏭 Purchase Order</option>
+              </select>
+            </div>
+
+            {/* Document picker */}
+            {sourceType && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 220 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Select Document</label>
+                <select className="input" style={{ fontSize: 12 }} value={sourceId} onChange={e => setSourceId(e.target.value)}>
+                  <option value="">— Pick document —</option>
+                  {sourceOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Markup % — only for vendor docs, not quotations */}
+            {sourceType && sourceType !== 'quotation' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Markup %</label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {[5, 10, 15, 20].map(p => (
+                    <button key={p} onClick={() => setMarkupPct(p)}
+                      style={{ padding: '5px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
+                        background: markupPct === p ? 'var(--amber)' : 'transparent',
+                        color: markupPct === p ? '#000' : 'var(--amber)',
+                        border: '1px solid var(--amber)' }}>
+                      +{p}%
+                    </button>
+                  ))}
+                  <input type="number" className="input" min={0} max={500} step={0.5}
+                    style={{ width: 72, fontWeight: 700, borderColor: 'var(--amber)', textAlign: 'center' }}
+                    value={markupPct}
+                    onChange={e => setMarkupPct(parseFloat(e.target.value) || 0)}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Apply button */}
+            {sourceType && (
+              <button className="btn btn-primary" style={{ background: 'var(--amber)', borderColor: 'var(--amber)', color: '#000', fontWeight: 700, alignSelf: 'flex-end' }}
+                onClick={applySource}>
+                ✅ Apply
+              </button>
+            )}
+          </div>
+
+          {/* Markup preview — show what price conversion looks like */}
+          {sourceType && sourceType !== 'quotation' && sourceId && (() => {
+            const rec = sourceOptions.find(o => o.id === sourceId)?.record
+            if (!rec?.items?.length) return null
+            const markup = parseFloat(markupPct) || 0
+            const first = rec.items[0]
+            const base = parseFloat(first.marketPrice || first.costPrice || 0)
+            const sell = parseFloat((base * (1 + markup / 100)).toFixed(2))
+            return (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'rgba(0,0,0,0.15)', borderRadius: 6 }}>
+                e.g. <strong>{first.description}</strong>: cost <span style={{ color: 'var(--red)' }}>PKR {base.toLocaleString()}</span>
+                → selling <span style={{ color: 'var(--green)', fontWeight: 700 }}>PKR {sell.toLocaleString()}</span>
+                &nbsp;(+{markup}%)
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -690,6 +814,18 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
             <div className="input-group">
               <label className="input-label">From Quotation</label>
               <input className="input" value={form.quotationRef} disabled style={{ opacity: 0.6 }} />
+            </div>
+          )}
+          {form.supplyOrderRef && (
+            <div className="input-group">
+              <label className="input-label">From Supply Order</label>
+              <input className="input" value={form.supplyOrderRef} disabled style={{ opacity: 0.6 }} />
+            </div>
+          )}
+          {form.purchaseRef && (
+            <div className="input-group">
+              <label className="input-label">From Purchase Order</label>
+              <input className="input" value={form.purchaseRef} disabled style={{ opacity: 0.6 }} />
             </div>
           )}
         </div>
