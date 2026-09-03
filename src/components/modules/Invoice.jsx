@@ -889,6 +889,26 @@ function InvoiceForm({ initial, fromQuotation, onSave, onCancel, onOpenDN }) {
         </div>
 
         <Attachments refId={initial?.id} refType="invoice" uploadedBy={currentUser?.name} />
+
+        {/* Read-only attachments from source Quotation */}
+        {(initial?.quotationId || form.quotationId) && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>
+              📋 Attachments from Quotation {form.quotationRef} (view only)
+            </div>
+            <Attachments refId={initial?.quotationId || form.quotationId} refType="quotation" readOnly={true} uploadedBy={currentUser?.name} />
+          </div>
+        )}
+
+        {/* Read-only attachments from source Supply Order */}
+        {(initial?.supplyOrderId || form.supplyOrderId) && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>
+              🛒 Attachments from Supply Order {form.supplyOrderRef} (view only)
+            </div>
+            <Attachments refId={initial?.supplyOrderId || form.supplyOrderId} refType="supply-order" readOnly={true} uploadedBy={currentUser?.name} />
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -1078,6 +1098,7 @@ export default function Invoices() {
         <InvoiceForm
           initial={selected || (fromSO ? {
             supplyOrderRef: fromSO.supplyOrderRef,
+            supplyOrderId: fromSO.supplyOrderId,
             items: fromSO.items,
             notes: fromSO.notes,
             clientName: '', clientContact: '', accountHeadID: '',
