@@ -502,17 +502,24 @@ export default function SupplyOrders({ isEmployee = false }) {
       <div className="table-wrapper">
         <table>
           <thead>
-            <tr><th>#</th><th>Title</th><th>Supplier</th><th>Date</th><th>Items</th><th>Priority</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Title / Items</th><th>Supplier</th><th>Date</th><th>Priority</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {orders.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No supply orders.</td></tr>}
+            {orders.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No supply orders.</td></tr>}
             {orders.map(o => (
               <tr key={o.id}>
                 <td className="font-mono" style={{ fontSize: 12 }}>{o.number}</td>
-                <td style={{ fontWeight: 600 }}>{o.title}</td>
+                <td style={{ maxWidth: 240 }}>
+                  {o.title && <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 2 }}>{o.title}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {(o.items || []).slice(0, 2).map((i, idx) => (
+                      <span key={idx}>{i.description}{idx < Math.min((o.items||[]).length, 2) - 1 ? ', ' : ''}</span>
+                    ))}
+                    {(o.items||[]).length > 2 && <span> +{(o.items||[]).length - 2} more</span>}
+                  </div>
+                </td>
                 <td style={{ fontSize: 12 }}>{o.supplierName || '—'}</td>
                 <td style={{ fontSize: 12 }}>{o.date}</td>
-                <td>{(o.items || []).length}</td>
                 <td><span style={{ color: PRIORITY_COLORS[o.priority], fontWeight: 700, fontSize: 12, textTransform: 'capitalize' }}>{o.priority}</span></td>
                 <td>
                   <select
