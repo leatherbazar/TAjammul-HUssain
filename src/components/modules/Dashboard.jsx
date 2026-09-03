@@ -267,6 +267,22 @@ export default function Dashboard() {
     return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6)
   }, [data])
 
+  // ── Dynamic wallet balances — calculated from DayBook entries in real-time ───
+  const walletBalances = useMemo(() => {
+    const db = data.dayBook || []
+    const names = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Cheque']
+    const result = {}
+    names.forEach(w => {
+      const key = w.toLowerCase().replace(/\s+/g, '')
+      const inflow  = db.filter(e => e.type === 'income'  && (e.wallet || 'Cash').toLowerCase().replace(/\s+/g, '') === key)
+                        .reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
+      const outflow = db.filter(e => e.type === 'expense' && (e.wallet || 'Cash').toLowerCase().replace(/\s+/g, '') === key)
+                        .reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
+      result[key] = inflow - outflow
+    })
+    return result
+  }, [data.dayBook])
+
   const walletCards = [
     { icon: '💵', name: 'Cash',      key: 'cash',      color: 'var(--green)'  },
     { icon: '🏦', name: 'Bank',      key: 'bank',      color: 'var(--blue)'   },
@@ -310,7 +326,7 @@ export default function Dashboard() {
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700 }}>{w.name}</div>
                 <div style={{ fontSize: 16, fontWeight: 900, fontFamily: 'Orbitron, monospace', color: w.color }}>
-                  PKR {Number((data.wallets||{})[w.key] || 0).toLocaleString()}
+                  PKR {Number(walletBalances[w.key] || 0).toLocaleString()}
                 </div>
               </div>
             </div>

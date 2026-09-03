@@ -4,6 +4,7 @@ import { fmtDate } from '../../utils/fmt'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
 import ContactSelect from '../common/ContactSelect'
+import UniversalPaymentModal from '../common/UniversalPaymentModal'
 import { exportInvoicePDF } from '../../utils/pdfExport'
 import Attachments from '../common/Attachments'
 import { calcExpr } from '../../utils/calcExpr'
@@ -17,79 +18,7 @@ const TAX_OPTIONS = [
   { label: 'Custom', val: -1 },
 ]
 
-// ─── Receive Payment Modal ───────────────────────────────────────────────────
-function RecordPaymentModal({ invoice, onClose, onSuccess }) {
-  const balance = Math.max((invoice.total || 0) - (invoice.advancePaid || 0), 0)
-  const [amount, setAmount] = useState(balance.toString())
-  const [wallet, setWallet] = useState('Cash')
-  const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10))
-  const [notes,  setNotes]  = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = async () => {
-    const amt = parseFloat(amount)
-    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return }
-    if (amt > balance + 0.01) { toast.error(`Maximum is PKR ${balance.toLocaleString()}`); return }
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/invoices/${invoice.id}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, wallet, date, notes }),
-      })
-      const d = await res.json()
-      if (!res.ok) { toast.error(d.error || 'Failed'); setSaving(false); return }
-      toast.success(`PKR ${amt.toLocaleString()} received via ${wallet}!`)
-      onSuccess()
-    } catch { toast.error('Connection error.'); setSaving(false) }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-title">💰 Receive Payment — {invoice.number}</div>
-        <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: 14, fontSize: 13 }}>
-          <span style={{ color: 'var(--text-muted)' }}>Invoice Total: </span>
-          <strong>PKR {Number(invoice.total || 0).toLocaleString()}</strong>
-          <span style={{ margin: '0 8px', color: 'var(--text-muted)' }}>|</span>
-          <span style={{ color: 'var(--text-muted)' }}>Already Paid: </span>
-          <strong style={{ color: 'var(--green)' }}>PKR {Number(invoice.advancePaid || 0).toLocaleString()}</strong>
-          <span style={{ margin: '0 8px', color: 'var(--text-muted)' }}>|</span>
-          <span style={{ color: 'var(--text-muted)' }}>Balance Due: </span>
-          <strong style={{ color: 'var(--red)' }}>PKR {balance.toLocaleString()}</strong>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <div className="input-group">
-            <label className="input-label">Amount Received (PKR) *</label>
-            <input type="number" className="input" value={amount} onChange={e => setAmount(e.target.value)}
-              placeholder="0.00" autoFocus style={{ borderColor: 'var(--green)', fontSize: 18, fontWeight: 700 }} />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Received In (Wallet)</label>
-            <select className="input" value={wallet} onChange={e => setWallet(e.target.value)}>
-              {['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Cheque'].map(w => <option key={w}>{w}</option>)}
-            </select>
-          </div>
-          <div className="input-group">
-            <label className="input-label">Date</label>
-            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Notes (optional)</label>
-            <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Cheque#, remarks..." />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary w-full" onClick={handleSave} disabled={saving}
-            style={{ background: 'rgba(34,197,94,0.2)', border: '1px solid var(--green)', color: 'var(--green)', fontWeight: 700 }}>
-            {saving ? 'Saving...' : '💰 Record Payment'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// RecordPaymentModal replaced by UniversalPaymentModal (imported above)
 
 // ─── Remaining Qty Card ──────────────────────────────────────────────────────
 function RemainingQtyCard({ invoice, deliveryNotes }) {
@@ -1326,13 +1255,17 @@ export default function Invoices() {
       )}
 
       {payInvoice && (
-        <RecordPaymentModal
-          invoice={payInvoice}
+        <UniversalPaymentModal
+          direction="inbound"
+          docNumber={payInvoice.number}
+          partyName={payInvoice.clientName}
+          total={payInvoice.total || 0}
+          alreadyPaid={payInvoice.advancePaid || 0}
+          apiEndpoint={`/api/invoices/${payInvoice.id}/payment`}
           onClose={() => setPayInvoice(null)}
           onSuccess={async () => {
             setPayInvoice(null)
             await refreshData()
-            // Rule 1 frontend: notify if all DNs are now delivered
             try {
               const res = await fetch(`/api/delivery-notes/sync-check?invoiceRef=${encodeURIComponent(payInvoice.number)}`)
               if (res.ok) {

@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { fmtDate } from '../../utils/fmt'
 import ContactSelect from '../common/ContactSelect'
 import MasterCodeModal from '../common/MasterCodeModal'
+import UniversalPaymentModal from '../common/UniversalPaymentModal'
 import Attachments from '../common/Attachments'
 import toast from 'react-hot-toast'
 
@@ -521,10 +522,15 @@ export default function Purchases() {
         </div>
       )}
 
-      {/* Pay Supplier Modal */}
+      {/* Pay Supplier — Universal Payment Modal */}
       {payModal && (
-        <PaySupplierModal
-          purchase={payModal}
+        <UniversalPaymentModal
+          direction="outbound"
+          docNumber={payModal.number}
+          partyName={payModal.supplierName}
+          total={payModal.totalAmount || 0}
+          alreadyPaid={payModal.paidAmount || 0}
+          apiEndpoint={`/api/purchases/${payModal.id}/payment`}
           onClose={() => setPayModal(null)}
           onSuccess={async () => { setPayModal(null); await refreshData() }}
         />

@@ -692,18 +692,20 @@ app.post('/api/invoices/fix-bad-numbers', async (req, res) => {
 // ── Record payment against an invoice (marks paid/partial + ledger + dayBook) ─
 app.post('/api/invoices/:id/payment', async (req, res) => {
   try {
-    const { amount, wallet, date, notes } = req.body
-    const paid = parseFloat(amount) || 0
-    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(amount) || 0       // clears balance
+    const net   = parseFloat(netAmount) ?? gross // hits wallet
+    const wht   = parseFloat(whtAmount) || 0
+    if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
 
     const invoice = await Invoice.findOne({ id: req.params.id }).lean()
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' })
 
-    const prevPaid    = parseFloat(invoice.advancePaid) || 0
-    const total       = parseFloat(invoice.total) || 0
-    const newPaid     = prevPaid + paid
-    const newBalance  = total - newPaid
-    const newStatus   = newBalance <= 0 ? 'paid' : 'partial'
+    const prevPaid   = parseFloat(invoice.advancePaid) || 0
+    const total      = parseFloat(invoice.total) || 0
+    const newPaid    = prevPaid + gross    // gross clears invoice balance
+    const newBalance = total - newPaid
+    const newStatus  = newBalance <= 0 ? 'paid' : 'partial'
 
     const updated = await Invoice.findOneAndUpdate(
       { id: req.params.id },
@@ -711,37 +713,57 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
       { new: true }
     ).lean()
 
-    // ── Ledger credit entry (client paid us) ──────────────────────────────────
+    const txDate = date || new Date().toISOString().slice(0, 10)
+
+    // ── Ledger: credit client account (gross — full obligation settled) ─────────
     if (invoice.accountHeadID) {
       await postLedgerEntry({
         accountHeadID: invoice.accountHeadID,
         contactName:   invoice.clientName,
-        date:          date || new Date().toISOString().slice(0, 10),
-        description:   `Payment received for ${invoice.number}`,
+        date:          txDate,
+        description:   `Payment received for ${invoice.number}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
         documentRef:   invoice.number,
         documentType:  'payment',
         debit:         0,
-        credit:        paid,
+        credit:        gross,
       })
     }
 
-    // ── DayBook entry (income received) ───────────────────────────────────────
+    // ── DayBook: net amount received into wallet ───────────────────────────────
     await models.dayBook.create({
       id:          Date.now().toString(),
-      date:        date || new Date().toISOString().slice(0, 10),
+      date:        txDate,
       type:        'income',
       category:    'Client Payment',
       description: `Payment received: ${invoice.number} from ${invoice.clientName || 'Client'}`,
       partyName:   invoice.clientName || '',
       accountHeadID: invoice.accountHeadID || '',
-      reference:   invoice.number,
-      debit:       paid,
+      reference:   reference || invoice.number,
+      debit:       net,     // net after WHT hits the wallet
       credit:      0,
       wallet:      wallet || 'Cash',
       notes:       notes || '',
     })
 
-    // ── Rule 1: if now fully paid, auto-set all linked Delivery Notes → delivered ─
+    // ── WHT: post to tax head if applicable ───────────────────────────────────
+    if (wht > 0) {
+      await models.dayBook.create({
+        id:          (Date.now() + 1).toString(),
+        date:        txDate,
+        type:        'income',
+        category:    'WHT Deducted (Tax)',
+        description: `WHT ${whtPct}% on ${invoice.number} — ${invoice.clientName}`,
+        partyName:   invoice.clientName || '',
+        accountHeadID: 'TAX-WHT',
+        reference:   invoice.number,
+        debit:       wht,
+        credit:      0,
+        wallet:      'Tax Head',
+        notes:       `WHT withheld at source`,
+      })
+    }
+
+    // ── Rule 1: if now fully paid, auto-set all linked Delivery Notes → delivered
     if (newStatus === 'paid' && invoice.number) {
       await models.deliveryNotes.updateMany(
         { invoiceRef: invoice.number },
@@ -1221,16 +1243,18 @@ app.post('/api/purchases', async (req, res) => {
 // ── Record payment to supplier (marks paid/partial + ledger + dayBook) ─────────
 app.post('/api/purchases/:id/payment', async (req, res) => {
   try {
-    const { amount, wallet, date, notes } = req.body
-    const paid = parseFloat(amount) || 0
-    if (paid <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(amount) || 0
+    const net   = parseFloat(netAmount) ?? gross
+    const wht   = parseFloat(whtAmount) || 0
+    if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
 
     const purchase = await Purchase.findOne({ id: req.params.id }).lean()
     if (!purchase) return res.status(404).json({ error: 'Purchase not found' })
 
     const prevPaid   = parseFloat(purchase.paidAmount) || 0
     const total      = parseFloat(purchase.totalAmount) || 0
-    const newPaid    = prevPaid + paid
+    const newPaid    = prevPaid + gross
     const newBalance = total - newPaid
     const newStatus  = newBalance <= 0.01 ? 'paid' : 'partial'
 
@@ -1240,36 +1264,57 @@ app.post('/api/purchases/:id/payment', async (req, res) => {
       { new: true }
     ).lean()
 
-    // ── Ledger: debit on supplier account (we paid them — reduces AP) ──────────
+    const txDate = date || new Date().toISOString().slice(0, 10)
+
+    // ── Ledger: debit supplier account (reduces AP by gross amount) ───────────
     if (purchase.accountHeadID) {
       await postLedgerEntry({
         accountHeadID: purchase.accountHeadID,
         contactName:   purchase.supplierName,
-        date:          date || new Date().toISOString().slice(0, 10),
-        description:   `Payment to supplier for ${purchase.number}`,
+        date:          txDate,
+        description:   `Payment to supplier for ${purchase.number}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
         documentRef:   purchase.number,
         documentType:  'payment',
-        debit:         paid,   // debit on supplier = we paid them (AP decreases)
+        debit:         gross,
         credit:        0,
       })
     }
 
-    // ── DayBook: expense (cash/bank goes out) ─────────────────────────────────
+    // ── DayBook: net cash out of wallet ───────────────────────────────────────
     await models.dayBook.create({
       id:          Date.now().toString(),
-      date:        date || new Date().toISOString().slice(0, 10),
+      date:        txDate,
       type:        'expense',
       category:    'Supplier Payment',
       description: `Paid to ${purchase.supplierName || 'Supplier'} for ${purchase.number}`,
       partyName:   purchase.supplierName || '',
       accountHeadID: purchase.accountHeadID || '',
-      reference:   purchase.number,
+      reference:   reference || purchase.number,
       debit:       0,
-      credit:      paid,   // cash goes out
+      credit:      net,    // only net leaves the wallet
       wallet:      wallet || 'Cash',
       notes:       notes || '',
       companyId:   purchase.companyId || 'TAT',
     })
+
+    // ── WHT: post to tax head as payable ──────────────────────────────────────
+    if (wht > 0) {
+      await models.dayBook.create({
+        id:          (Date.now() + 1).toString(),
+        date:        txDate,
+        type:        'expense',
+        category:    'WHT Payable (Tax)',
+        description: `WHT ${whtPct}% on ${purchase.number} — ${purchase.supplierName}`,
+        partyName:   purchase.supplierName || '',
+        accountHeadID: 'TAX-WHT',
+        reference:   purchase.number,
+        debit:       0,
+        credit:      wht,
+        wallet:      'Tax Head',
+        notes:       `WHT deducted at source`,
+        companyId:   purchase.companyId || 'TAT',
+      })
+    }
 
     res.json({ ok: true, purchase: fmtLean(updated), newPaid, newBalance: Math.max(newBalance, 0), status: newStatus })
   } catch (err) { res.status(500).json({ error: err.message }) }
