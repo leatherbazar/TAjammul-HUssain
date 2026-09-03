@@ -492,53 +492,37 @@ export async function exportSupplyOrderPDF(order, company = null) {
   if (order.assignedToName) doc.text(`Assigned To: ${order.assignedToName}`, 14, y + 12)
   y += 20
 
+  // PDF shows ONLY purchase/cost price — selling price & profit are internal only
   const bodyRows = (order.items || []).map((item, i) => {
     const qty = item.qty || 0
-    const price = parseFloat(item.marketPrice) || 0
-    const cost  = parseFloat(item.purchasePrice) || 0
-    const sellAmt = qty * price
-    const costAmt = qty * cost
-    const profitPct = price > 0 && cost > 0 ? ((price - cost) / price * 100).toFixed(1) + '%' : '—'
-    const profitAmt = cost > 0 && price > 0 ? `PKR ${(sellAmt - costAmt).toLocaleString()}` : '—'
+    const cost = parseFloat(item.purchasePrice) || 0
     return [i + 1, item.description, item.color || '—', qty,
-      cost  ? `PKR ${cost.toLocaleString()}`  : '—',
-      price ? `PKR ${price.toLocaleString()}` : '—',
-      price ? `PKR ${sellAmt.toLocaleString()}` : '—',
-      profitPct, profitAmt,
+      cost ? `PKR ${cost.toLocaleString()}` : '—',
+      cost ? `PKR ${(qty * cost).toLocaleString()}` : '—',
       item.note || '']
   })
 
   const ts = getTableStyles(company)
   autoTable(doc, {
     startY: y,
-    head: [['#', 'Description', 'Color', 'Qty', 'Cost Price', 'Market Price', 'Total', 'Margin%', 'Profit', 'Note']],
+    head: [['#', 'Description', 'Color', 'Qty', 'Unit Price', 'Amount', 'Note']],
     body: bodyRows, theme: 'striped',
     headStyles: ts.headStyles, bodyStyles: ts.bodyStyles, alternateRowStyles: ts.alternateRowStyles,
-    columnStyles: { 9: { cellWidth: 28 } },
-    styles: { fontSize: 7.5 },
+    columnStyles: { 6: { cellWidth: 35 } },
   })
 
-  // Totals summary
-  const totalSell = (order.items || []).reduce((s, i) => s + (i.qty || 0) * (parseFloat(i.marketPrice) || 0), 0)
+  // Total — purchase cost only
   const totalCost = (order.items || []).reduce((s, i) => s + (i.qty || 0) * (parseFloat(i.purchasePrice) || 0), 0)
-  const totalProfit = totalSell - totalCost
-  const overallPct = totalSell > 0 && totalCost > 0 ? ((totalProfit / totalSell) * 100).toFixed(1) : null
   let ty = doc.lastAutoTable.finalY + 6
-  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
-  doc.text(`Total Selling: PKR ${totalSell.toLocaleString()}`, 14, ty)
-  if (totalCost > 0) {
-    doc.text(`Total Cost: PKR ${totalCost.toLocaleString()}`, 80, ty)
-    doc.setTextColor(totalProfit >= 0 ? 34 : 200, totalProfit >= 0 ? 139 : 40, totalProfit >= 0 ? 34 : 40)
-    doc.text(`Net Profit: PKR ${totalProfit.toLocaleString()} (${overallPct}%)`, 150, ty)
-    doc.setTextColor(40, 40, 40)
-    ty += 6
-  }
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
+  if (totalCost > 0) doc.text(`Total Amount: PKR ${totalCost.toLocaleString()}`, 140, ty)
 
   if (order.notes) {
-    doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-    doc.text('Notes:', 14, ty + 2)
+    const ny = ty + 8
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(40, 40, 40)
+    doc.text('Notes:', 14, ny)
     doc.setFont('helvetica', 'normal')
-    doc.text(order.notes, 30, ty + 2)
+    doc.text(order.notes, 30, ny)
   }
 
   addFooter(doc, company)

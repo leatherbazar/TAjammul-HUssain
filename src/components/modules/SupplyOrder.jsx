@@ -166,10 +166,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
       </div>
 
       <div className="section-box">
-        <div className="section-title" style={{ justifyContent: 'space-between' }}>
-          <span>📦 Items to Source</span>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add Item</button>
-        </div>
+        <div className="section-title">📦 Items to Source</div>
 
         {form.items.map((item, idx) => {
           const matrixQty = calcMatrixTotal(item.matrixRows)
@@ -206,25 +203,19 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                       )}
                     </div>
                     <div style={{ flex: '1 1 130px' }}>
-                      <label className="input-label">Market Price (PKR) {isEmployee && '← Update'}</label>
-                      <input type="number" className="input" min="0" value={item.marketPrice}
-                        onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
-                        style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
-                    </div>
-                    <div style={{ flex: '1 1 130px' }}>
-                      <label className="input-label" style={{ color: 'var(--amber)' }}>Purchase/Cost Price</label>
+                      <label className="input-label" style={{ color: 'var(--amber)' }}>Purchase Price (PKR)</label>
                       <input type="number" className="input" min="0" value={item.purchasePrice || ''}
                         onChange={e => updateItem(item.id, 'purchasePrice', e.target.value)}
                         placeholder="0" style={{ borderColor: 'rgba(245,158,11,0.4)' }} />
                     </div>
-                    <div style={{ flex: '0 0 130px' }}>
-                      <label className="input-label">Selling Total</label>
-                      <div style={{ padding: '9px 12px', background: 'var(--glass)', borderRadius: 8, border: '1px solid var(--glass-border)', fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap', fontSize: 13 }}>
-                        PKR {amount.toLocaleString()}
-                      </div>
+                    <div style={{ flex: '1 1 130px' }}>
+                      <label className="input-label">Selling Price (PKR) {isEmployee && '← Update'}</label>
+                      <input type="number" className="input" min="0" value={item.marketPrice}
+                        onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
+                        style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
                     </div>
                     {purchasePrice > 0 && marketPrice > 0 && (
-                      <div style={{ flex: '0 0 140px' }}>
+                      <div style={{ flex: '0 0 150px' }}>
                         <label className="input-label" style={{ color: profitAmt >= 0 ? 'var(--green)' : '#f87171' }}>Profit Margin</label>
                         <div style={{ padding: '9px 12px', background: profitAmt >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', borderRadius: 8, border: `1px solid ${profitAmt >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, fontWeight: 700, color: profitAmt >= 0 ? 'var(--green)' : '#f87171', whiteSpace: 'nowrap', fontSize: 13 }}>
                           {profitPct}% · PKR {Math.abs(profitAmt).toLocaleString()}
@@ -259,6 +250,10 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           )
         })}
 
+        <button className="btn btn-secondary btn-sm" onClick={addItem} style={{ width: '100%', marginBottom: 14 }}>
+          + Add Item
+        </button>
+
         <div className="input-group">
           <label className="input-label">General Notes</label>
           <textarea className="input" value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} spellCheck />
@@ -266,17 +261,35 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
 
         {/* Order Total */}
         {(() => {
-          const grandTotal = form.items.reduce((sum, item) => {
+          const purchaseTotal = form.items.reduce((sum, item) => {
+            const matrixQty = calcMatrixTotal(item.matrixRows)
+            const qty = item.useMatrix && matrixQty > 0 ? matrixQty : (parseInt(item.qty) || 0)
+            return sum + qty * (parseFloat(item.purchasePrice) || 0)
+          }, 0)
+          const sellingTotal = form.items.reduce((sum, item) => {
             const matrixQty = calcMatrixTotal(item.matrixRows)
             const qty = item.useMatrix && matrixQty > 0 ? matrixQty : (parseInt(item.qty) || 0)
             return sum + qty * (parseFloat(item.marketPrice) || 0)
           }, 0)
+          const totalProfit = sellingTotal - purchaseTotal
           return (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <div style={{ padding: '12px 24px', borderRadius: 10, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', textAlign: 'right' }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>ORDER TOTAL</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--green)', fontFamily: 'monospace' }}>
-                  PKR {grandTotal.toLocaleString()}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, gap: 10, flexWrap: 'wrap' }}>
+              {sellingTotal > 0 && (
+                <div style={{ padding: '10px 18px', borderRadius: 10, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>SELLING TOTAL</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#818cf8', fontFamily: 'monospace' }}>PKR {sellingTotal.toLocaleString()}</div>
+                </div>
+              )}
+              {purchaseTotal > 0 && sellingTotal > 0 && (
+                <div style={{ padding: '10px 18px', borderRadius: 10, background: totalProfit >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${totalProfit >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`, textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>NET PROFIT</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: totalProfit >= 0 ? 'var(--green)' : '#f87171', fontFamily: 'monospace' }}>PKR {totalProfit.toLocaleString()}</div>
+                </div>
+              )}
+              <div style={{ padding: '12px 24px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', textAlign: 'right' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>ORDER TOTAL (Purchase)</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--amber)', fontFamily: 'monospace' }}>
+                  PKR {purchaseTotal.toLocaleString()}
                 </div>
               </div>
             </div>
@@ -459,7 +472,15 @@ export default function SupplyOrders({ isEmployee = false }) {
                 <td style={{ fontSize: 12 }}>{o.date}</td>
                 <td>{(o.items || []).length}</td>
                 <td><span style={{ color: PRIORITY_COLORS[o.priority], fontWeight: 700, fontSize: 12, textTransform: 'capitalize' }}>{o.priority}</span></td>
-                <td><span className={`badge badge-${o.status === 'in-progress' ? 'pending' : o.status}`}>{o.status}</span></td>
+                <td>
+                  <select
+                    value={o.status}
+                    onChange={e => updateRecord('supplyOrders', o.id, { ...o, status: e.target.value })}
+                    style={{ fontSize: 11, fontWeight: 700, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--glass-border)', background: 'var(--glass)', color: o.status === 'delivered' ? 'var(--green)' : o.status === 'cancelled' ? '#f87171' : o.status === 'sourced' ? '#818cf8' : 'var(--amber)', cursor: 'pointer', textTransform: 'capitalize' }}
+                  >
+                    {['pending', 'in-progress', 'sourced', 'delivered', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => { if (isEmployee) { setSelected(o); setView('edit') } else { setMasterAction({ type: 'edit', item: o }) } }}>✏️</button>
