@@ -1161,6 +1161,7 @@ export default function Invoices() {
             <tr>
               <th>Invoice #</th>
               <th>Client</th>
+              <th>Subject / Items</th>
               <th>Date</th>
               <th>Due</th>
               <th>Total</th>
@@ -1173,7 +1174,7 @@ export default function Invoices() {
           </thead>
           <tbody>
             {invoices.length === 0 && (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+              <tr><td colSpan={11} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                 No invoices yet. Create one or approve a quotation.
               </td></tr>
             )}
@@ -1192,6 +1193,13 @@ export default function Invoices() {
                   <td>
                     <div style={{ fontWeight: 600 }}>{inv.clientName}</div>
                     {inv.quotationRef && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Ref: {inv.quotationRef}</div>}
+                  </td>
+                  <td style={{ maxWidth: 200 }}>
+                    {(inv.subject || inv.title) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{inv.subject || inv.title}</div>}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {(inv.items || []).slice(0, 2).map((i, idx) => <span key={idx}>{i.description}{idx < Math.min((inv.items||[]).length,2)-1 ? ', ' : ''}</span>)}
+                      {(inv.items||[]).length > 2 && <span> +{(inv.items||[]).length - 2} more</span>}
+                    </div>
                   </td>
                   <td style={{ fontSize: 12 }}>{inv.date}</td>
                   <td style={{ fontSize: 12, color: isOverdue ? 'var(--red)' : 'inherit', fontWeight: isOverdue ? 700 : 400 }}>

@@ -308,16 +308,23 @@ export default function DeliveryNotes() {
       <div className="table-wrapper">
         <table>
           <thead>
-            <tr><th>#</th><th>Client</th><th>Date</th><th>Items</th><th>Driver</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Client</th><th>Subject / Items</th><th>Invoice Ref</th><th>Date</th><th>Driver</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {notes.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No delivery notes.</td></tr>}
+            {notes.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No delivery notes.</td></tr>}
             {notes.map(n => (
               <tr key={n.id}>
                 <td className="font-mono" style={{ fontSize: 12 }}>{n.number}</td>
-                <td>{n.clientName}</td>
+                <td style={{ fontWeight: 600 }}>{n.clientName}</td>
+                <td style={{ maxWidth: 200 }}>
+                  {(n.subject || n.title) && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{n.subject || n.title}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {(n.items || []).slice(0, 2).map((i, idx) => <span key={idx}>{i.description}{idx < Math.min((n.items||[]).length,2)-1 ? ', ' : ''}</span>)}
+                    {(n.items||[]).length > 2 && <span> +{(n.items||[]).length - 2} more</span>}
+                  </div>
+                </td>
+                <td style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{n.invoiceRef || '—'}</td>
                 <td style={{ fontSize: 12 }}>{n.date}</td>
-                <td>{(n.items || []).length}</td>
                 <td style={{ fontSize: 12 }}>{n.driverName || '—'}</td>
                 <td>
                   <select

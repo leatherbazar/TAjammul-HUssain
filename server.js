@@ -242,6 +242,32 @@ async function generateAccountHeadID(type) {
   return `${prefix}-${String(num).padStart(3, '0')}`
 }
 
+// ── Auto-register contact if name not found ───────────────────────────────────
+// Returns the accountHeadID (existing or newly created)
+async function autoRegisterContact(name, type, phone = '', companyId = 'TAT') {
+  if (!name || !name.trim()) return null
+  const trimmed = name.trim()
+  // Check if already exists (case-insensitive)
+  const existing = await Contact.findOne({ name: { $regex: `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean()
+  if (existing) return existing.accountHeadID
+  // Create new contact
+  const accountHeadID = await generateAccountHeadID(type)
+  await Contact.create({
+    id: Date.now().toString(),
+    accountHeadID,
+    type,
+    name: trimmed,
+    phone: phone || '',
+    email: '',
+    address: '',
+    openingBalance: 0,
+    currentBalance: 0,
+    companyId,
+  })
+  console.log(`✅ Auto-registered ${type}: ${trimmed} → ${accountHeadID}`)
+  return accountHeadID
+}
+
 // ── Ledger trigger: create entry + update contact balance ─────────────────────
 // ── Single-source-of-truth balance: Σdebit − Σcredit across ALL ledger entries
 async function computeLiveBalance(accountHeadID) {
@@ -686,12 +712,18 @@ app.post('/api/invoices', async (req, res) => {
         await Singleton.findOneAndUpdate({ key: 'companies' }, { value: updated })
       }
     }
-    const invoice = await Invoice.create({ ...req.body, number: safeNumber })
+    // Auto-register client if not already in contacts
+    let accountHeadID = req.body.accountHeadID
+    if (!accountHeadID && req.body.clientName) {
+      accountHeadID = await autoRegisterContact(req.body.clientName, 'client', req.body.clientContact, req.body.companyId)
+    }
+
+    const invoice = await Invoice.create({ ...req.body, number: safeNumber, accountHeadID: accountHeadID || req.body.accountHeadID })
 
     // ── LEDGER TRIGGER ────────────────────────────────────────────────────────
-    if (req.body.accountHeadID && req.body.total > 0) {
+    if (accountHeadID && req.body.total > 0) {
       await postLedgerEntry({
-        accountHeadID: req.body.accountHeadID,
+        accountHeadID,
         contactName:   req.body.clientName,
         date:          req.body.date,
         description:   `Invoice: ${req.body.number || ''}`,
@@ -1059,7 +1091,12 @@ app.post('/api/supplyOrders', async (req, res) => {
       const existing = await models.supplyOrders.findOne({ id: req.body.id }).lean()
       if (existing) return res.json(fmtLean(existing))
     }
-    const doc = await models.supplyOrders.create(req.body)
+    // Auto-register supplier if not already in contacts
+    let accountHeadID = req.body.accountHeadID
+    if (!accountHeadID && req.body.supplierName) {
+      accountHeadID = await autoRegisterContact(req.body.supplierName, 'supplier', req.body.supplierContact, req.body.companyId)
+    }
+    const doc = await models.supplyOrders.create({ ...req.body, accountHeadID: accountHeadID || req.body.accountHeadID })
     res.json(fmt(doc))
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -1607,7 +1644,15 @@ OTHER_COLLECTIONS.filter(n => n !== 'dayBook' && n !== 'supplyOrders').forEach(n
         const existing = await models[name].findOne({ id: req.body.id }).lean()
         if (existing) return res.json(fmtLean(existing))
       }
-      res.json(fmt(await models[name].create(req.body)))
+      // Auto-register contact from document fields
+      let body = { ...req.body }
+      if (name === 'quotations' && body.clientName && !body.accountHeadID) {
+        body.accountHeadID = await autoRegisterContact(body.clientName, 'client', body.clientContact, body.companyId)
+      }
+      if (name === 'purchases' && body.supplierName && !body.accountHeadID) {
+        body.accountHeadID = await autoRegisterContact(body.supplierName, 'supplier', body.supplierContact, body.companyId)
+      }
+      res.json(fmt(await models[name].create(body)))
     }
     catch (err) { res.status(500).json({ error: err.message }) }
   })

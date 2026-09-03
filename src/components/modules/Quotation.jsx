@@ -413,12 +413,12 @@ export default function Quotations() {
         <table>
           <thead>
             <tr>
-              <th>#</th><th>Client</th><th>Date</th><th>Items</th><th>Total</th><th>Tax</th><th>Status</th><th>Actions</th>
+              <th>#</th><th>Client</th><th>Subject / Items</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {quotations.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No quotations found. Create your first one.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No quotations found. Create your first one.</td></tr>
             )}
             {quotations.map(q => {
               // Find existing invoice for this quotation (by quotationId or quotationRef)
@@ -429,10 +429,15 @@ export default function Quotations() {
               <tr key={q.id}>
                 <td className="font-mono" style={{ fontSize: 12 }}>{q.number}</td>
                 <td><div style={{ fontWeight: 600 }}>{q.clientName}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{q.clientContact}</div></td>
+                <td style={{ maxWidth: 220 }}>
+                  {(q.subject || q.title) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{q.subject || q.title}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {(q.items || []).slice(0, 2).map((i, idx) => <span key={idx}>{i.description}{idx < Math.min((q.items||[]).length,2)-1 ? ', ' : ''}</span>)}
+                    {(q.items||[]).length > 2 && <span> +{(q.items||[]).length - 2} more</span>}
+                  </div>
+                </td>
                 <td style={{ fontSize: 12 }}>{q.date}</td>
-                <td>{(q.items || []).length} item(s)</td>
                 <td className="text-green bold">PKR {Number(q.total || 0).toLocaleString()}</td>
-                <td style={{ fontSize: 12 }}>{q.taxRate}%</td>
                 <td><span className={`badge badge-${q.status}`}>{q.status}</span></td>
                 <td>
                   {q.status === 'cancelled' ? (
