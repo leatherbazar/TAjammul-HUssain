@@ -37,15 +37,22 @@ if (!process.env.VERCEL) {
 
 // ─── CONNECT MONGODB ──────────────────────────────────────────────────────────
 // Reuse connection across Vercel serverless invocations
-if (mongoose.connection.readyState === 0) {
-  mongoose.connect(process.env.DATABASE_URL, {
-    serverSelectionTimeoutMS: 30000,
-    socketTimeoutMS: 60000,
-    connectTimeoutMS: 30000,
-  })
-    .then(() => console.log('✅ MongoDB Atlas connected'))
-    .catch(err => console.error('❌ MongoDB connection error:', err))
-}
+const dbConnectPromise = mongoose.connection.readyState === 0
+  ? mongoose.connect(process.env.DATABASE_URL, {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 30000,
+    })
+      .then(() => console.log('✅ MongoDB Atlas connected'))
+      .catch(err => console.error('❌ MongoDB connection error:', err))
+  : Promise.resolve()
+
+// Wait for DB before handling any request (critical for Vercel cold starts)
+app.use(async (req, res, next) => {
+  if (mongoose.connection.readyState === 1) return next()
+  try { await dbConnectPromise } catch (_) {}
+  next()
+})
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SCHEMAS & MODELS
