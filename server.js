@@ -37,6 +37,7 @@ if (!process.env.VERCEL) {
 
 // ─── CONNECT MONGODB ──────────────────────────────────────────────────────────
 // Reuse connection across Vercel serverless invocations
+mongoose.set('bufferTimeoutMS', 30000)  // match our connection timeout
 const dbConnectPromise = mongoose.connection.readyState === 0
   ? mongoose.connect(process.env.DATABASE_URL, {
       serverSelectionTimeoutMS: 30000,
