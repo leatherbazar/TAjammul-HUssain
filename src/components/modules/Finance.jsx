@@ -19,20 +19,28 @@ function WalletManager() {
 
   const walletKeys = { Cash: 'cash', Bank: 'bank', JazzCash: 'jazzcash', EasyPaisa: 'easypaisa' }
 
-  // Compute live balance from Day Book entries (opening balance + debit - credit)
-  // Debit = money IN (income/received), Credit = money OUT (expense/paid)
+  // Compute live balance from Day Book entries using entry TYPE (not debit/credit column)
+  // because manual entries may store amounts in either column inconsistently.
+  // type=income/advance-received → money IN (+), type=expense/advance-given → money OUT (-)
   const walletBalances = useMemo(() => {
+    const IN_TYPES  = new Set(['income', 'advance-received'])
+    const OUT_TYPES = new Set(['expense', 'advance-given'])
     const result = {}
     for (const [w, key] of Object.entries(walletKeys)) {
       const opening = data.wallets?.[key] || 0
-      // Case-insensitive + trimmed match so "Cash", " cash ", "CASH" all match
       const wLower = w.toLowerCase().trim()
       const entries = (data.dayBook || []).filter(e =>
         typeof e.wallet === 'string' && e.wallet.toLowerCase().trim() === wLower
       )
-      const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
-      const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
-      result[key] = opening + totalDebit - totalCredit
+      let balance = opening
+      for (const e of entries) {
+        const amount = (parseFloat(e.debit) || 0) + (parseFloat(e.credit) || 0)
+        const t = (e.type || '').toLowerCase()
+        if (IN_TYPES.has(t))  balance += amount
+        else if (OUT_TYPES.has(t)) balance -= amount
+        // 'transfer' entries are neutral per-wallet (handled by two entries)
+      }
+      result[key] = balance
     }
     return result
   }, [data.wallets, data.dayBook])
@@ -364,7 +372,7 @@ function DayBook() {
         </div>
         <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700 }}>NET BALANCE</div>
-          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: totals.debit - totals.credit >= 0 ? 'var(--green)' : 'var(--red)' }}>PKR {(totals.debit - totals.credit).toLocaleString()}</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: totals.debit - totals.credit >= 0 ? 'var(--green)' : 'var(--red)' }}>PKR {Number(totals.debit - totals.credit).toLocaleString()}</div>
         </div>
       </div>
 
