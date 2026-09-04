@@ -263,8 +263,13 @@ async function generateAccountHeadID(type) {
 async function autoRegisterContact(name, type, phone = '', companyId = 'TAT') {
   if (!name || !name.trim()) return null
   const trimmed = name.trim()
-  // Check if already exists (case-insensitive)
-  const existing = await Contact.findOne({ name: { $regex: `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean()
+  // Match by BOTH name AND type — prevents a client and supplier with the same
+  // name from sharing an accountHeadID and cross-contaminating each other's ledger.
+  const safeRegex = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const existing = await Contact.findOne({
+    name: { $regex: `^${safeRegex}$`, $options: 'i' },
+    type,   // ← strict type guard: client stays client, supplier stays supplier
+  }).lean()
   if (existing) return existing.accountHeadID
   // Create new contact
   const accountHeadID = await generateAccountHeadID(type)

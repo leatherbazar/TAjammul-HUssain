@@ -374,13 +374,15 @@ export default function Ledger() {
     const isClient   = contact.type === 'client'
     const isSupplier = contact.type === 'supplier'
 
-    // ── Client invoices (strict accountHeadID match, fallback to clientName) ──
+    // ── Client invoices — strict accountHeadID match; fallback name only for clients ──
     const allInvoices = data.invoices || []
-    const clientInvoices = allInvoices.filter(i =>
-      i.accountHeadID
-        ? i.accountHeadID === contact.accountHeadID
-        : i.clientName?.toLowerCase() === contact.name?.toLowerCase()
-    )
+    const clientInvoices = contact.type === 'client'
+      ? allInvoices.filter(i =>
+          i.accountHeadID
+            ? i.accountHeadID === contact.accountHeadID
+            : i.clientName?.toLowerCase().trim() === contact.name?.toLowerCase().trim()
+        )
+      : []  // suppliers never own client invoices
     const pendingInvoices   = clientInvoices.filter(i => i.status !== 'paid')
     const paidInvoices      = clientInvoices.filter(i => i.status === 'paid')
     const totalInvoiced     = clientInvoices.reduce((s, i) => s + (i.total || 0), 0)
@@ -388,13 +390,15 @@ export default function Ledger() {
     const totalPending      = clientInvoices.reduce((s, i) => s + Math.max((i.total || 0) - (i.advancePaid || 0), 0), 0)
     const totalPaid         = paidInvoices.reduce((s, i) => s + (i.total || 0), 0)
 
-    // ── Supplier purchases ──────────────────────────────────────────────────────
+    // ── Supplier purchases — strict accountHeadID match; fallback name only for suppliers ──
     const allPurchases = data.purchases || []
-    const supplierPurchases = allPurchases.filter(p =>
-      p.accountHeadID
-        ? p.accountHeadID === contact.accountHeadID
-        : p.supplierName?.toLowerCase() === contact.name?.toLowerCase()
-    )
+    const supplierPurchases = contact.type === 'supplier'
+      ? allPurchases.filter(p =>
+          p.accountHeadID
+            ? p.accountHeadID === contact.accountHeadID
+            : p.supplierName?.toLowerCase().trim() === contact.name?.toLowerCase().trim()
+        )
+      : []  // clients never own supplier purchases
     const totalPurchased   = supplierPurchases.reduce((s, p) => s + (p.totalAmount || 0), 0)
     const totalPaidToSupp  = supplierPurchases.reduce((s, p) => s + (p.amountPaid || 0), 0)
     const totalOwedToSupp  = supplierPurchases.reduce((s, p) => s + Math.max((p.totalAmount || 0) - (p.amountPaid || 0), 0), 0)
@@ -695,7 +699,7 @@ export default function Ledger() {
     const invs    = allInvoices.filter(i =>
       i.accountHeadID
         ? i.accountHeadID === c.accountHeadID
-        : i.clientName?.toLowerCase() === c.name?.toLowerCase()
+        : i.clientName?.toLowerCase().trim() === c.name?.toLowerCase().trim()
     )
     const pending = invs.filter(i => i.status !== 'paid').reduce((s, i) => s + Math.max((i.total || 0) - (i.advancePaid || 0), 0), 0)
     acc[c.id] = pending
