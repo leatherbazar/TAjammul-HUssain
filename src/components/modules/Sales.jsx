@@ -365,6 +365,7 @@ export default function Sales() {
   const [selected, setSelected]     = useState(null)
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch]         = useState('')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
   const [accountHeads, setAccountHeads] = useState(null)
 
   // Load account heads on mount
@@ -375,12 +376,19 @@ export default function Sales() {
       .catch(() => {})
   }, [])
 
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const s of (data.sales || [])) { const m = (s.date || s.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.sales])
+
   const sales = useMemo(() => {
-    const list = data.sales || []
+    let list = data.sales || []
+    if (monthFilter !== 'all') list = list.filter(s => (s.date || s.createdAt || '').slice(0,7) === monthFilter)
     if (!search) return list
     const q = search.toLowerCase()
     return list.filter(s => s.clientName?.toLowerCase().includes(q) || s.number?.includes(q))
-  }, [data.sales, search])
+  }, [data.sales, search, monthFilter])
 
   // Summary stats
   const totalRevenue = useMemo(() => sales.filter(s => s.status === 'confirmed').reduce((sum, s) => sum + (s.total || 0), 0), [sales])
@@ -458,7 +466,11 @@ export default function Sales() {
       )}
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search by client or #..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="input" style={{ maxWidth: 240 }} placeholder="🔍 Search by client or #..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+        </select>
       </div>
 
       <div className="table-wrapper">

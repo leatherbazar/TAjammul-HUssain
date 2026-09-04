@@ -408,14 +408,22 @@ export default function SupplyOrders({ isEmployee = false }) {
   const [masterAction, setMasterAction] = useState(null)
   const [receiveModal, setReceiveModal] = useState(null)
   const [search, setSearch] = useState('')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
   const [dupConfirm, setDupConfirm] = useState(null) // { pendingForm, existing[] }
+
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const o of (data.supplyOrders || [])) { const m = (o.date || o.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.supplyOrders])
 
   const orders = useMemo(() => {
     let list = data.supplyOrders || []
+    if (monthFilter !== 'all') list = list.filter(o => (o.date || o.createdAt || '').slice(0,7) === monthFilter)
     if (isEmployee) list = list.filter(o => o.assignedTo === currentUser?.id || !o.assignedTo)
     if (search) list = list.filter(o => o.title?.toLowerCase().includes(search.toLowerCase()))
     return list
-  }, [data.supplyOrders, search, isEmployee, currentUser])
+  }, [data.supplyOrders, search, isEmployee, currentUser, monthFilter])
 
   const createSO = async (f, forcePart = false) => {
     const allOrders = data.supplyOrders || []
@@ -496,7 +504,11 @@ export default function SupplyOrders({ isEmployee = false }) {
       </div>
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search orders..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="input" style={{ maxWidth: 240 }} placeholder="🔍 Search orders..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+        </select>
       </div>
 
       <div className="table-wrapper">

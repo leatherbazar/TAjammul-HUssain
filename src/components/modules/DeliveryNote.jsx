@@ -265,12 +265,20 @@ export default function DeliveryNotes() {
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch] = useState('')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
+
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const n of (data.deliveryNotes || [])) { const m = (n.date || n.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.deliveryNotes])
 
   const notes = useMemo(() => {
-    const list = data.deliveryNotes || []
+    let list = data.deliveryNotes || []
+    if (monthFilter !== 'all') list = list.filter(n => (n.date || n.createdAt || '').slice(0,7) === monthFilter)
     if (!search) return list
     return list.filter(n => n.clientName?.toLowerCase().includes(search.toLowerCase()) || n.number?.includes(search))
-  }, [data.deliveryNotes, search])
+  }, [data.deliveryNotes, search, monthFilter])
 
   const handleSave = async (f) => {
     if (selected) {
@@ -303,7 +311,11 @@ export default function DeliveryNotes() {
         <button className="btn btn-primary" onClick={() => { setSelected(null); setView('new') }}>+ New Delivery Note</button>
       </div>
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="input" style={{ maxWidth: 240 }} placeholder="🔍 Search..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+        </select>
       </div>
       <div className="table-wrapper">
         <table>

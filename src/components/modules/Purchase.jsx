@@ -315,6 +315,7 @@ export default function Purchases() {
   const [payModal, setPayModal] = useState(null)         // supplier payment
   const [masterAction, setMasterAction] = useState(null)
   const [search, setSearch] = useState('')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
   const [tab, setTab] = useState('purchases') // 'purchases' | 'supply-orders'
   const [accountHeads, setAccountHeads] = useState(null)
 
@@ -326,12 +327,19 @@ export default function Purchases() {
       .catch(() => {})
   }, [])
 
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const p of (data.purchases || [])) { const m = (p.date || p.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.purchases])
+
   const purchases = useMemo(() => {
-    const list = data.purchases || []
+    let list = data.purchases || []
+    if (monthFilter !== 'all') list = list.filter(p => (p.date || p.createdAt || '').slice(0,7) === monthFilter)
     if (!search) return list
     const q = search.toLowerCase()
     return list.filter(p => p.supplierName?.toLowerCase().includes(q) || p.number?.includes(q))
-  }, [data.purchases, search])
+  }, [data.purchases, search, monthFilter])
 
   // Supply orders NOT yet converted to purchase
   const pendingSOs = useMemo(() => {
@@ -428,7 +436,11 @@ export default function Purchases() {
       {tab === 'purchases' && (
         <>
           <div className="search-bar">
-            <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search by supplier or #..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input className="input" style={{ maxWidth: 240 }} placeholder="🔍 Search by supplier or #..." value={search} onChange={e => setSearch(e.target.value)} />
+            <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+              <option value="all">All Months</option>
+              {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+            </select>
           </div>
           <div className="table-wrapper">
             <table>

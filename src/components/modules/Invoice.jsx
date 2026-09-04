@@ -948,6 +948,7 @@ export default function Invoices() {
   const [payInvoice, setPayInvoice] = useState(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
 
   // Pick up any pending quotation conversion navigated from Quotations page
   useEffect(() => {
@@ -978,8 +979,15 @@ export default function Invoices() {
     }
   }, [])
 
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const i of (data.invoices || [])) { const m = (i.date || i.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.invoices])
+
   const invoices = useMemo(() => {
     let list = data.invoices || []
+    if (monthFilter !== 'all') list = list.filter(i => (i.date || i.createdAt || '').slice(0,7) === monthFilter)
     if (search) list = list.filter(i =>
       i.clientName?.toLowerCase().includes(search.toLowerCase()) || i.number?.includes(search)
     )
@@ -1166,9 +1174,13 @@ export default function Invoices() {
       </div>
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 300 }} placeholder="🔍 Search client or invoice #..."
+        <input className="input" style={{ maxWidth: 240 }} placeholder="🔍 Search client or invoice #..."
           value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input" style={{ maxWidth: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+        </select>
+        <select className="input" style={{ maxWidth: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="all">All Status</option>
           {['unpaid', 'partial', 'paid', 'cancelled'].map(s => <option key={s}>{s}</option>)}
         </select>

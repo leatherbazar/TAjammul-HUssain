@@ -235,6 +235,7 @@ export default function Quotations() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
   const [fromSO, setFromSO] = useState(null)
 
   // Pick up Supply Order → Quotation navigation
@@ -257,13 +258,20 @@ export default function Quotations() {
     return names
   }, [data.quotations])
 
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const q of (data.quotations || [])) { const m = (q.date || q.createdAt || '').slice(0,7); if (m) seen.add(m) }
+    return [...seen].sort((a,b) => b.localeCompare(a))
+  }, [data.quotations])
+
   const quotations = useMemo(() => {
     let list = data.quotations || []
+    if (monthFilter !== 'all') list = list.filter(q => (q.date || q.createdAt || '').slice(0,7) === monthFilter)
     if (search) list = list.filter(q => q.clientName?.toLowerCase().includes(search.toLowerCase()) || q.number?.includes(search))
     if (statusFilter !== 'all') list = list.filter(q => q.status === statusFilter)
     if (clientFilter !== 'all') list = list.filter(q => q.clientName === clientFilter)
     return list
-  }, [data.quotations, search, statusFilter, clientFilter])
+  }, [data.quotations, search, statusFilter, clientFilter, monthFilter])
 
   const handleSave = async (formData, goToInvoice = false) => {
     let savedRecord
@@ -393,12 +401,16 @@ export default function Quotations() {
       </div>
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 260 }} placeholder="🔍 Search by client or number..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input" style={{ maxWidth: 200 }} value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
+        <input className="input" style={{ maxWidth: 220 }} placeholder="🔍 Search by client or number..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => { const [y,mo]=m.split('-'); return <option key={m} value={m}>{new Date(+y,+mo-1).toLocaleString('default',{month:'long',year:'numeric'})}</option> })}
+        </select>
+        <select className="input" style={{ maxWidth: 160 }} value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
           <option value="all">👤 All Clients</option>
           {clientList.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
-        <select className="input" style={{ maxWidth: 150 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <select className="input" style={{ maxWidth: 130 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="all">All Status</option>
           {['draft', 'sent', 'approved', 'invoiced', 'cancelled'].map(s => <option key={s}>{s}</option>)}
         </select>

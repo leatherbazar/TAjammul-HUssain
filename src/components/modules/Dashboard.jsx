@@ -168,6 +168,7 @@ function ChartTip({ active, payload, label }) {
 export default function Dashboard() {
   const { data, refreshData } = useApp()
   const [showRecover, setShowRecover] = useState(false)
+  const [dayFilter, setDayFilter] = useState(() => new Date().toISOString().slice(0, 10))
 
   // ── Financial computations ─────────────────────────────────────────────────
   const fin = useMemo(() => {
@@ -257,6 +258,26 @@ export default function Dashboard() {
       }
     })
   }, [data.sales])
+
+  // ── Today's DayBook activity ───────────────────────────────────────────────
+  const IN_T  = new Set(['income', 'advance-received'])
+  const OUT_T = new Set(['expense', 'advance-given'])
+  const todayEntries = useMemo(() => {
+    return [...(data.dayBook || [])]
+      .filter(e => (e.date || '').slice(0, 10) === dayFilter)
+      .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date))
+  }, [data.dayBook, dayFilter])
+
+  const todayTotals = useMemo(() => {
+    let income = 0, expense = 0
+    for (const e of todayEntries) {
+      const amt = (parseFloat(e.debit)||0) + (parseFloat(e.credit)||0) + (parseFloat(e.amount)||0)
+      const t = (e.type||'').toLowerCase()
+      if (IN_T.has(t))  income  += amt
+      if (OUT_T.has(t)) expense += amt
+    }
+    return { income, expense, net: income - expense }
+  }, [todayEntries])
 
   // ── Recent DayBook entries ─────────────────────────────────────────────────
   const recentDB = useMemo(() =>
@@ -413,54 +434,76 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Recent Day Book Entries ── */}
+      {/* ── Daily Activity ── */}
       <div className="section-box" style={{ marginBottom: 20 }}>
-        <div className="section-title">📒 Recent Day Book Entries</div>
-        {recentDB.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div className="section-title" style={{ margin: 0 }}>📒 Daily Cash Flow</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Date:</span>
+            <input type="date" className="input" style={{ maxWidth: 160, padding: '5px 10px', fontSize: 13 }}
+              value={dayFilter} onChange={e => setDayFilter(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Today's summary cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
+          <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, padding: '12px 16px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Money In</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green)', fontFamily: 'Orbitron,monospace' }}>PKR {todayTotals.income.toLocaleString()}</div>
+          </div>
+          <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 10, padding: '12px 16px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Money Out</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--red)', fontFamily: 'Orbitron,monospace' }}>PKR {todayTotals.expense.toLocaleString()}</div>
+          </div>
+          <div style={{ background: todayTotals.net >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${todayTotals.net >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(220,38,38,0.3)'}`, borderRadius: 10, padding: '12px 16px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Net</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: todayTotals.net >= 0 ? 'var(--green)' : 'var(--red)', fontFamily: 'Orbitron,monospace' }}>PKR {todayTotals.net.toLocaleString()}</div>
+          </div>
+        </div>
+
+        {todayEntries.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
-            No day book entries yet. Go to Finance → Day Book to add entries.
+            No entries for this date. Go to Finance → Day Book to add entries.
           </div>
         ) : (
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>Date</th>
                   <th>Type</th>
                   <th>Category</th>
                   <th>Description</th>
                   <th>Party</th>
                   <th>Wallet</th>
-                  <th className="text-red">Debit (Dr)</th>
-                  <th className="text-green">Credit (Cr)</th>
+                  <th className="text-green">Money IN</th>
+                  <th className="text-red">Money OUT</th>
                 </tr>
               </thead>
               <tbody>
-                {recentDB.map((e, i) => (
-                  <tr key={e.id || i}>
-                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{e.date}</td>
-                    <td>
-                      <span style={{
-                        fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700, textTransform: 'capitalize',
-                        background: e.type === 'income' ? 'rgba(34,197,94,0.15)' : e.type === 'expense' ? 'rgba(220,38,38,0.15)' : 'rgba(59,130,246,0.15)',
-                        color:      e.type === 'income' ? 'var(--green)'         : e.type === 'expense' ? 'var(--red)'           : 'var(--blue)',
-                      }}>{e.type}</span>
-                    </td>
-                    <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.category || '—'}</td>
-                    <td style={{ fontWeight: 500 }}>{e.description || '—'}</td>
-                    <td style={{ fontSize: 12 }}>
-                      {e.partyName ? (
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{e.partyName}</div>
-                          {e.accountHeadID && <div style={{ fontSize: 10, color: 'var(--blue)', fontFamily: 'monospace' }}>{e.accountHeadID}</div>}
-                        </div>
-                      ) : '—'}
-                    </td>
-                    <td style={{ fontSize: 12 }}>{e.wallet || '—'}</td>
-                    <td className="text-red bold">{e.debit ? `PKR ${Number(e.debit).toLocaleString()}` : '—'}</td>
-                    <td className="text-green bold">{e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—'}</td>
-                  </tr>
-                ))}
+                {todayEntries.map((e, i) => {
+                  const amt = (parseFloat(e.debit)||0) + (parseFloat(e.credit)||0) + (parseFloat(e.amount)||0)
+                  const t = (e.type||'').toLowerCase()
+                  const isIn  = IN_T.has(t)
+                  const isOut = OUT_T.has(t)
+                  return (
+                    <tr key={e.id || i}>
+                      <td>
+                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700, textTransform: 'capitalize',
+                          background: isIn ? 'rgba(34,197,94,0.15)' : isOut ? 'rgba(220,38,38,0.15)' : 'rgba(59,130,246,0.15)',
+                          color:      isIn ? 'var(--green)'         : isOut ? 'var(--red)'           : 'var(--blue)',
+                        }}>{e.type}</span>
+                      </td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.category || '—'}</td>
+                      <td style={{ fontWeight: 500 }}>{e.description || '—'}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {e.partyName ? <div><div style={{ fontWeight: 600 }}>{e.partyName}</div>{e.accountHeadID && <div style={{ fontSize: 10, color: 'var(--blue)', fontFamily: 'monospace' }}>{e.accountHeadID}</div>}</div> : '—'}
+                      </td>
+                      <td style={{ fontSize: 12 }}>{e.wallet || '—'}</td>
+                      <td className="text-green bold">{isIn  ? `PKR ${amt.toLocaleString()}` : '—'}</td>
+                      <td className="text-red bold">{isOut ? `PKR ${amt.toLocaleString()}` : '—'}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
