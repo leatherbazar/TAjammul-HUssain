@@ -184,8 +184,9 @@ export default function Dashboard() {
     // ── Purchases
     const totalPurchased = purchases.reduce((s, x) => s + (x.totalAmount || 0), 0)
 
-    // ── Gross Profit = Revenue billed − cost of purchases
-    const totalProfit = totalRevenue - totalPurchased
+    // ── Gross Profit = sum of per-sale profit (salePrice − costPrice × qty)
+    const allSales = data.sales || []
+    const totalProfit = allSales.reduce((s, x) => s + (x.totalProfit || 0), 0)
     const profitPct   = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0.0'
 
     // ── Payments actually received (advancePaid across ALL invoices, any status)
@@ -206,10 +207,17 @@ export default function Dashboard() {
       .filter(p => p.paymentStatus !== 'paid')
       .reduce((s, p) => s + Math.max((p.totalAmount || 0) - (p.paidAmount || 0), 0), 0)
 
-    // ── Cash Position = DayBook net (income received − expenses paid)
-    const dbIncome   = dayBook.filter(e => e.type === 'income' ).reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
-    const dbExpenses = dayBook.filter(e => e.type === 'expense').reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
-    const cash = Math.max(dbIncome - dbExpenses, 0)
+    // ── Cash Position = DayBook net (type-based, matches Finance module wallet logic)
+    const IN_TYPES  = new Set(['income', 'advance-received'])
+    const OUT_TYPES = new Set(['expense', 'advance-given'])
+    let dbIncome = 0, dbExpenses = 0
+    for (const e of dayBook) {
+      const amt = (parseFloat(e.debit) || 0) + (parseFloat(e.credit) || 0) + (parseFloat(e.amount) || 0)
+      const t = (e.type || '').toLowerCase()
+      if (IN_TYPES.has(t))  dbIncome   += amt
+      if (OUT_TYPES.has(t)) dbExpenses += amt
+    }
+    const cash = dbIncome - dbExpenses
 
     return {
       totalRevenue, totalProfit, profitPct, totalPurchased,
@@ -227,8 +235,8 @@ export default function Dashboard() {
         const d = new Date(e.date || e.createdAt)
         return d.getFullYear() === year && d.getMonth() === idx
       })
-      const income  = entries.filter(e => e.type === 'income'  || e.category === 'Sale'    ).reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
-      const expense = entries.filter(e => e.type === 'expense' || e.category === 'Purchase').reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
+      const income  = entries.filter(e => ['income','advance-received'].includes((e.type||'').toLowerCase())).reduce((s, e) => s + (parseFloat(e.debit)||0) + (parseFloat(e.credit)||0) + (parseFloat(e.amount)||0), 0)
+      const expense = entries.filter(e => ['expense','advance-given'].includes((e.type||'').toLowerCase())).reduce((s, e) => s + (parseFloat(e.debit)||0) + (parseFloat(e.credit)||0) + (parseFloat(e.amount)||0), 0)
       return { month, income, expense }
     })
   }, [data.dayBook])
