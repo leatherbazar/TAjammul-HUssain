@@ -853,10 +853,11 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
       partyName:   invoice.clientName || '',
       accountHeadID: invoice.accountHeadID || '',
       reference:   reference || invoice.number,
-      debit:       net,     // net after WHT hits the wallet
+      debit:       net,
       credit:      0,
       wallet:      wallet || 'Cash',
       notes:       notes || '',
+      companyId:   invoice.companyId || 'TAT',
     })
 
     // ── WHT: post to tax head if applicable ───────────────────────────────────
@@ -874,6 +875,7 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
         credit:      0,
         wallet:      'Tax Head',
         notes:       `WHT withheld at source`,
+        companyId:   invoice.companyId || 'TAT',
       })
     }
 
@@ -1260,9 +1262,10 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
       description: `Stock Received: ${number} from ${order.supplierName} (SO: ${order.number})`,
       partyName:   order.supplierName,
       reference:   number,
-      credit:      totalAmount,   // AP — we owe supplier
+      credit:      totalAmount,
       debit:       0,
       wallet:      'Accounts Payable',
+      companyId:   order.companyId || req.body.companyId || 'TAT',
     })
 
     res.json({ ok: true, purchase: fmt(purchase) })
@@ -1353,6 +1356,7 @@ app.post('/api/purchases', async (req, res) => {
       credit:      totalAmount,
       debit:       0,
       wallet:      'Accounts Payable',
+      companyId:   req.body.companyId || 'TAT',
     })
 
     res.json(fmt(purchase))
@@ -1560,9 +1564,10 @@ app.post('/api/sales', async (req, res) => {
       description: `Sale: ${number} to ${req.body.clientName || 'Customer'} | Profit: PKR ${totalProfit.toLocaleString()}`,
       partyName:   req.body.clientName || '',
       reference:   number,
-      debit:       total,     // AR — customer owes us
+      debit:       total,
       credit:      0,
       wallet:      'Accounts Receivable',
+      companyId:   req.body.companyId || 'TAT',
     })
 
     res.json(fmt(sale))
