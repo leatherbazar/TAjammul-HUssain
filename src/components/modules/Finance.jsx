@@ -27,7 +27,7 @@ function WalletManager() {
       const entries = (data.dayBook || []).filter(e => e.wallet === w)
       const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
       const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
-      result[key] = opening + totalCredit - totalDebit
+      result[key] = opening + totalDebit - totalCredit
     }
     return result
   }, [data.wallets, data.dayBook])
