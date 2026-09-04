@@ -3,8 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { fmtDate } from '../../utils/fmt'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts'
 import toast from 'react-hot-toast'
-
-const WALLETS_LIST = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa']
+import UniversalPaymentModal from '../common/UniversalPaymentModal'
 
 // ─── Mini KPI Card ────────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, color, icon, isMoney = true, action }) {
@@ -35,116 +34,42 @@ function KpiCard({ label, value, sub, color, icon, isMoney = true, action }) {
   )
 }
 
-// ─── Recover Payment Modal ────────────────────────────────────────────────────
-function RecoverModal({ invoices, onClose, onSuccess }) {
-  const [selected, setSelected]   = useState(null)
-  const [amount, setAmount]       = useState('')
-  const [wallet, setWallet]       = useState('Cash')
-  const [date, setDate]           = useState(new Date().toISOString().slice(0, 10))
-  const [saving, setSaving]       = useState(false)
-
-  const outstanding = invoices.filter(i => i.status !== 'paid')
+// ─── Invoice Picker Modal (step 1 of Dashboard payment recovery) ──────────────
+function InvoicePickerModal({ invoices, onSelect, onClose }) {
+  const outstanding = invoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled')
+  const [selected, setSelected] = useState('')
   const inv = outstanding.find(i => i.id === selected)
-  const balance = inv ? (inv.total || 0) - (inv.advancePaid || 0) : 0
-
-  const handleRecover = async () => {
-    if (!selected) { toast.error('Select an invoice first.'); return }
-    const amt = parseFloat(amount)
-    if (!amt || amt <= 0) { toast.error('Enter a valid amount.'); return }
-    if (amt > balance + 0.01) { toast.error(`Amount exceeds balance of PKR ${balance.toLocaleString()}`); return }
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/invoices/${selected}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, wallet, date }),
-      })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error || 'Failed'); return }
-      toast.success(`PKR ${amt.toLocaleString()} recovered! Invoice ${data.status === 'paid' ? '✅ fully paid' : '⏳ partial'}.`)
-      onSuccess()
-    } catch {
-      toast.error('Connection error.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-title">📥 Record Payment Recovery</div>
-
-        {/* Invoice picker */}
-        <div className="input-group" style={{ marginBottom: 12 }}>
-          <label className="input-label">Select Outstanding Invoice *</label>
-          {outstanding.length === 0 ? (
-            <div style={{ padding: 12, borderRadius: 8, background: 'rgba(34,197,94,0.1)', color: 'var(--green)', fontSize: 13, textAlign: 'center' }}>
-              ✅ All invoices are paid!
+      <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">📥 Recover Payment — Select Invoice</div>
+        {outstanding.length === 0 ? (
+          <div style={{ padding: 16, textAlign: 'center', color: 'var(--green)', fontSize: 13 }}>✅ All invoices are paid!</div>
+        ) : (
+          <>
+            <div className="input-group" style={{ marginBottom: 14 }}>
+              <label className="input-label">Outstanding Invoice *</label>
+              <select className="input" value={selected} onChange={e => setSelected(e.target.value)}>
+                <option value="">— Choose invoice —</option>
+                {outstanding.map(i => {
+                  const bal = (i.total || 0) - (i.advancePaid || 0)
+                  return <option key={i.id} value={i.id}>{i.number} | {i.clientName} | Balance: PKR {bal.toLocaleString()}</option>
+                })}
+              </select>
             </div>
-          ) : (
-            <select className="input" value={selected || ''} onChange={e => { setSelected(e.target.value); setAmount('') }}>
-              <option value="">— Choose invoice —</option>
-              {outstanding.map(i => {
-                const bal = (i.total || 0) - (i.advancePaid || 0)
-                return (
-                  <option key={i.id} value={i.id}>
-                    {i.number} | {i.clientName || 'Client'} | Balance: PKR {bal.toLocaleString()}
-                  </option>
-                )
-              })}
-            </select>
-          )}
-        </div>
-
-        {/* Selected invoice summary */}
-        {inv && (
-          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', marginBottom: 12, fontSize: 13 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Invoice Total</span>
-              <span style={{ fontWeight: 700 }}>PKR {Number(inv.total || 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Already Paid</span>
-              <span style={{ color: 'var(--green)', fontWeight: 700 }}>PKR {Number(inv.advancePaid || 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--glass-border)', paddingTop: 6 }}>
-              <span style={{ fontWeight: 700 }}>Balance Due</span>
-              <span style={{ color: 'var(--red)', fontWeight: 900, fontFamily: 'monospace' }}>PKR {balance.toLocaleString()}</span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <div className="input-group">
-            <label className="input-label">Amount Received (PKR) *</label>
-            <input type="number" className="input" min="1" max={balance} value={amount}
-              onChange={e => setAmount(e.target.value)} placeholder="0.00"
-              style={{ borderColor: amount ? 'var(--green)' : undefined }} />
-            {inv && amount && (
-              <div style={{ fontSize: 11, marginTop: 3, color: parseFloat(amount) >= balance ? 'var(--green)' : 'var(--amber)' }}>
-                {parseFloat(amount) >= balance ? '✅ Full payment' : `Remaining after: PKR ${(balance - parseFloat(amount)).toLocaleString()}`}
+            {inv && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', marginBottom: 14, fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ color: 'var(--text-muted)' }}>Invoice Total</span><strong>PKR {Number(inv.total||0).toLocaleString()}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ color: 'var(--text-muted)' }}>Already Paid</span><strong style={{ color: 'var(--green)' }}>PKR {Number(inv.advancePaid||0).toLocaleString()}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--glass-border)', paddingTop: 6 }}><strong>Balance Due</strong><strong style={{ color: 'var(--red)', fontFamily: 'monospace' }}>PKR {((inv.total||0)-(inv.advancePaid||0)).toLocaleString()}</strong></div>
               </div>
             )}
-          </div>
-          <div className="input-group">
-            <label className="input-label">Received In</label>
-            <select className="input" value={wallet} onChange={e => setWallet(e.target.value)}>
-              {WALLETS_LIST.map(w => <option key={w}>{w}</option>)}
-            </select>
-          </div>
-          <div className="input-group">
-            <label className="input-label">Date</label>
-            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary w-full" onClick={handleRecover} disabled={saving || outstanding.length === 0}>
-            {saving ? 'Saving...' : '📥 Record Recovery'}
-          </button>
-        </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary w-full" disabled={!selected} onClick={() => onSelect(inv)}>Continue →</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -167,7 +92,8 @@ function ChartTip({ active, payload, label }) {
 
 export default function Dashboard() {
   const { data, refreshData } = useApp()
-  const [showRecover, setShowRecover] = useState(false)
+  const [recoverPicker, setRecoverPicker] = useState(false)  // step 1: pick invoice
+  const [recoverInvoice, setRecoverInvoice] = useState(null) // step 2: pay selected invoice
   const [dayFilter, setDayFilter] = useState(() => new Date().toISOString().slice(0, 10))
 
   // ── Financial computations ─────────────────────────────────────────────────
@@ -342,7 +268,7 @@ export default function Dashboard() {
         <KpiCard label="Accounts Payable"    value={fin.totalAP}            sub={`${(data.contacts||[]).filter(c=>c.type==='supplier').length} suppliers`}                                  color="var(--red)"    icon="📤" />
         <KpiCard label="Invoice Outstanding" value={fin.invoiceOutstanding}  sub={`${(data.invoices||[]).filter(i=>i.status!=='paid'&&i.status!=='cancelled').length} pending`}             color="var(--amber)"  icon="⚠️" />
         <KpiCard label="Invoice Recovered"   value={fin.invoicePaid}         sub={`${fin.paidCount} paid · ${fin.partialCount} partial`}                                                    color="var(--green)"  icon="✅"
-          action={{ label: '📥 Recover Payment', onClick: () => setShowRecover(true) }} />
+          action={{ label: '📥 Recover Payment', onClick: () => setRecoverPicker(true) }} />
       </div>
 
       {/* ── Wallets ── */}
@@ -510,12 +436,25 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Recover Modal ── */}
-      {showRecover && (
-        <RecoverModal
+      {/* ── Step 1: Pick invoice ── */}
+      {recoverPicker && (
+        <InvoicePickerModal
           invoices={data.invoices || []}
-          onClose={() => setShowRecover(false)}
-          onSuccess={async () => { setShowRecover(false); await refreshData() }}
+          onClose={() => setRecoverPicker(false)}
+          onSelect={inv => { setRecoverPicker(false); setRecoverInvoice(inv) }}
+        />
+      )}
+      {/* ── Step 2: Universal payment with WHT ── */}
+      {recoverInvoice && (
+        <UniversalPaymentModal
+          direction="inbound"
+          docNumber={recoverInvoice.number}
+          partyName={recoverInvoice.clientName}
+          total={recoverInvoice.total || 0}
+          alreadyPaid={recoverInvoice.advancePaid || 0}
+          apiEndpoint={`/api/invoices/${recoverInvoice.id}/payment`}
+          onClose={() => setRecoverInvoice(null)}
+          onSuccess={async () => { setRecoverInvoice(null); await refreshData() }}
         />
       )}
 

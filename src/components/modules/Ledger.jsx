@@ -10,104 +10,6 @@ const TYPE_LABELS  = { client: '🤝 Client',   supplier: '🏭 Supplier',  staf
 
 
 
-// ─── Pay Supplier Modal ───────────────────────────────────────────────────────
-function PaySupplierModal({ contact, onClose, onSuccess }) {
-  const [amount, setAmount] = useState('')
-  const [wallet, setWallet] = useState('Cash')
-  const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10))
-  const [notes,  setNotes]  = useState('')
-  const [ref,    setRef]    = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = async () => {
-    const amt = parseFloat(amount)
-    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return }
-    setSaving(true)
-    try {
-      const docRef = ref || `PAY-${Date.now().toString().slice(-6)}`
-
-      // ── 1. Ledger: DEBIT on supplier account (reduces AP — we paid them) ──────
-      await fetch('/api/ledger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accountHeadID: contact.accountHeadID,
-          contactName:   contact.name,
-          date,
-          description:   `Payment to ${contact.name}${notes ? ': ' + notes : ''}`,
-          documentRef:   docRef,
-          documentType:  'payment',
-          debit: amt, credit: 0,
-        }),
-      })
-
-      // ── 2. DayBook: expense (cash goes OUT of wallet) ─────────────────────────
-      // NOTE: No accountHeadID here — ledger was already updated above.
-      // Passing accountHeadID would double-post to ledger via server auto-trigger.
-      await fetch('/api/dayBook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: Date.now().toString(), date, type: 'expense',
-          category:    'Supplier Payment',
-          description: `Payment to ${contact.name}${notes ? ' — ' + notes : ''}`,
-          partyName:   contact.name,
-          reference:   docRef,
-          wallet,
-          debit:  0,
-          credit: amt,   // ✅ expense = credit (cash leaving the business)
-        }),
-      })
-      toast.success(`PKR ${amt.toLocaleString()} paid to ${contact.name}!`)
-      onSuccess()
-    } catch { toast.error('Connection error.'); setSaving(false) }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-title">💸 Pay Supplier — {contact.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-          Account: <span style={{ fontFamily: 'monospace', color: 'var(--amber)', fontWeight: 700 }}>{contact.accountHeadID}</span>
-          &nbsp;·&nbsp; This will post a <strong>Debit</strong> entry (reducing what you owe) and log an expense in Day Book.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <div className="input-group">
-            <label className="input-label">Amount Paid (PKR) *</label>
-            <input type="number" className="input" value={amount}
-              onChange={e => setAmount(e.target.value)} placeholder="0.00" autoFocus
-              style={{ borderColor: amount ? 'var(--amber)' : undefined, fontSize: 18, fontWeight: 700 }} />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Paid Via</label>
-            <select className="input" value={wallet} onChange={e => setWallet(e.target.value)}>
-              {['Cash','Bank','JazzCash','EasyPaisa','Cheque'].map(w => <option key={w}>{w}</option>)}
-            </select>
-          </div>
-          <div className="input-group">
-            <label className="input-label">Date</label>
-            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Reference (optional)</label>
-            <input className="input" value={ref} onChange={e => setRef(e.target.value)} placeholder="Cheque#, PO#..." />
-          </div>
-          <div className="input-group col-span-2">
-            <label className="input-label">Notes</label>
-            <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="What is this payment for?" />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary w-full" onClick={onClose}>Cancel</button>
-          <button className="btn btn-warning w-full" onClick={handleSave} disabled={saving}
-            style={{ background: 'rgba(245,158,11,0.2)', border: '1px solid var(--amber)', color: 'var(--amber)', fontWeight: 700 }}>
-            {saving ? 'Saving...' : '💸 Record Payment'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Edit Account ID Modal ────────────────────────────────────────────────────
 function EditAccountIDModal({ contact, onClose, onSuccess }) {
@@ -604,8 +506,13 @@ export default function Ledger() {
           />
         )}
         {paySupplier && (
-          <PaySupplierModal
-            contact={paySupplier}
+          <UniversalPaymentModal
+            direction="outbound"
+            docNumber={paySupplier.accountHeadID}
+            partyName={paySupplier.name}
+            total={Math.abs(paySupplier.currentBalance || 0)}
+            alreadyPaid={0}
+            apiEndpoint={`/api/contacts/${paySupplier.id}/pay-supplier`}
             onClose={() => setPaySupplier(null)}
             onSuccess={async () => { setPaySupplier(null); await reloadLedger() }}
           />

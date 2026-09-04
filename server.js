@@ -695,6 +695,62 @@ app.put('/api/contacts/:id/reassign-id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Standalone supplier payment (not tied to a purchase record) ───────────────
+// Used by Ledger module PaySupplier flow via UniversalPaymentModal
+app.post('/api/contacts/:id/pay-supplier', async (req, res) => {
+  try {
+    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(amount) || 0
+    const net   = parseFloat(netAmount) ?? gross
+    const wht   = parseFloat(whtAmount) || 0
+    if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
+
+    const contact = await Contact.findOne({ id: req.params.id }).lean()
+    if (!contact) return res.status(404).json({ error: 'Contact not found' })
+
+    const txDate = date || new Date().toISOString().slice(0, 10)
+    const docRef = reference || `PAY-${Date.now().toString().slice(-6)}`
+
+    // Ledger: debit supplier (reduces AP)
+    await postLedgerEntry({
+      accountHeadID: contact.accountHeadID,
+      contactName:   contact.name,
+      date:          txDate,
+      description:   `Payment to ${contact.name}${notes ? ': ' + notes : ''}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
+      documentRef:   docRef,
+      documentType:  'payment',
+      debit:         gross,
+      credit:        0,
+    })
+
+    // DayBook: net cash out of wallet
+    await models.dayBook.create({
+      id: Date.now().toString(), date: txDate, type: 'expense',
+      category: 'Supplier Payment',
+      description: `Paid to ${contact.name}${notes ? ' — ' + notes : ''}`,
+      partyName: contact.name, accountHeadID: contact.accountHeadID,
+      reference: docRef, wallet: wallet || 'Cash',
+      debit: 0, credit: net,
+      companyId: contact.companyId || 'TAT',
+    })
+
+    // WHT entry
+    if (wht > 0) {
+      await models.dayBook.create({
+        id: (Date.now() + 1).toString(), date: txDate, type: 'expense',
+        category: 'WHT Payable (Tax)',
+        description: `WHT ${whtPct}% on payment to ${contact.name}`,
+        partyName: contact.name, accountHeadID: 'TAX-WHT',
+        reference: docRef, wallet: 'Tax Head',
+        debit: 0, credit: wht,
+        companyId: contact.companyId || 'TAT',
+      })
+    }
+
+    res.json({ ok: true, gross, net, wht, status: 'paid' })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  INVOICES  (with auto ledger trigger)
 // ═══════════════════════════════════════════════════════════════════════════════
