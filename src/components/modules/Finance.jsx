@@ -19,14 +19,19 @@ function WalletManager() {
 
   const walletKeys = { Cash: 'cash', Bank: 'bank', JazzCash: 'jazzcash', EasyPaisa: 'easypaisa' }
 
-  // Compute live balance from Day Book entries (opening balance + credits - debits)
+  // Compute live balance from Day Book entries (opening balance + debit - credit)
+  // Debit = money IN (income/received), Credit = money OUT (expense/paid)
   const walletBalances = useMemo(() => {
     const result = {}
     for (const [w, key] of Object.entries(walletKeys)) {
       const opening = data.wallets?.[key] || 0
-      const entries = (data.dayBook || []).filter(e => e.wallet === w)
-      const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
+      // Case-insensitive + trimmed match so "Cash", " cash ", "CASH" all match
+      const wLower = w.toLowerCase().trim()
+      const entries = (data.dayBook || []).filter(e =>
+        typeof e.wallet === 'string' && e.wallet.toLowerCase().trim() === wLower
+      )
       const totalDebit  = entries.reduce((s, e) => s + (parseFloat(e.debit)  || 0), 0)
+      const totalCredit = entries.reduce((s, e) => s + (parseFloat(e.credit) || 0), 0)
       result[key] = opening + totalDebit - totalCredit
     }
     return result
@@ -359,7 +364,7 @@ function DayBook() {
         </div>
         <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700 }}>NET BALANCE</div>
-          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: totals.credit - totals.debit >= 0 ? 'var(--green)' : 'var(--red)' }}>PKR {(totals.credit - totals.debit).toLocaleString()}</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: totals.debit - totals.credit >= 0 ? 'var(--green)' : 'var(--red)' }}>PKR {(totals.debit - totals.credit).toLocaleString()}</div>
         </div>
       </div>
 
