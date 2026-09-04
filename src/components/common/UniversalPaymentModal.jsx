@@ -1,22 +1,21 @@
 import React, { useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
 
-const WALLETS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Cheque']
+const WALLETS    = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Cheque']
 const WHT_PRESETS = [5, 10, 15, 20, 22]
 
 /**
- * UniversalPaymentModal — single engine for both inbound (client) and outbound (vendor) payments.
+ * UniversalPaymentModal — three-tier split: Gross → Net (wallet) + WHT (Tax Head)
  *
  * Props:
  *  direction   'inbound'  = client pays us  (green theme)
  *              'outbound' = we pay supplier (amber theme)
- *  docNumber   invoice / purchase number
- *  partyName   client name or supplier name
+ *  docNumber   invoice / purchase / account-head number
+ *  partyName   client or supplier name
  *  total       document total (PKR)
  *  alreadyPaid amount already settled (PKR)
- *  apiEndpoint full path e.g. '/api/invoices/:id/payment'
- *  onClose     close handler
- *  onSuccess   (responseData) => void
+ *  apiEndpoint POST endpoint e.g. '/api/invoices/:id/payment'
+ *  onClose / onSuccess
  */
 export default function UniversalPaymentModal({
   direction = 'inbound',
@@ -28,180 +27,240 @@ export default function UniversalPaymentModal({
   onClose,
   onSuccess,
 }) {
-  const balance = Math.max(total - alreadyPaid, 0)
-  const isInbound = direction === 'inbound'
-  const accent = isInbound ? 'var(--green)' : 'var(--amber)'
-  const accentBg = isInbound ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)'
-  const accentBorder = isInbound ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)'
+  const balance    = Math.max(total - alreadyPaid, 0)
+  const isInbound  = direction === 'inbound'
+  const accent     = isInbound ? 'var(--green)' : 'var(--amber)'
+  const accentRgb  = isInbound ? '34,197,94'   : '245,158,11'
 
-  const [grossAmount, setGrossAmount] = useState(String(balance))
-  const [wallet,      setWallet]      = useState('Cash')
-  const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10))
-  const [reference,   setReference]   = useState('')
-  const [notes,       setNotes]       = useState('')
-  const [saving,      setSaving]      = useState(false)
+  // ── Tier 1: Gross ──────────────────────────────────────────────────────────
+  const [grossStr, setGrossStr] = useState(String(balance))
 
-  // WHT
-  const [applyWHT,  setApplyWHT]  = useState(false)
-  const [whtPct,    setWhtPct]    = useState(10)
-  const [customWHT, setCustomWHT] = useState(false)
-  const [whtManual, setWhtManual] = useState('')   // manual override of WHT amount
+  // ── Tier 3: WHT ────────────────────────────────────────────────────────────
+  const [whtPct,     setWhtPct]     = useState(0)       // 0 = no WHT
+  const [customMode, setCustomMode] = useState(false)
+  const [whtManual,  setWhtManual]  = useState('')      // manual override
 
-  const gross = parseFloat(grossAmount) || 0
+  // ── Tier 2: Net wallet ─────────────────────────────────────────────────────
+  const [wallet,    setWallet]    = useState('Cash')
+  const [date,      setDate]      = useState(new Date().toISOString().slice(0, 10))
+  const [reference, setReference] = useState('')
+  const [notes,     setNotes]     = useState('')
+  const [saving,    setSaving]    = useState(false)
+
+  // ── Derived values ─────────────────────────────────────────────────────────
+  const gross = parseFloat(grossStr) || 0
 
   const whtAmount = useMemo(() => {
-    if (!applyWHT) return 0
+    if (whtPct === 0 && whtManual === '') return 0
     if (whtManual !== '') return Math.max(parseFloat(whtManual) || 0, 0)
     return parseFloat((gross * whtPct / 100).toFixed(2))
-  }, [applyWHT, gross, whtPct, whtManual])
+  }, [gross, whtPct, whtManual])
 
-  const netAmount = Math.max(gross - whtAmount, 0)
+  const netAmount  = Math.max(gross - whtAmount, 0)
+  const splitValid = Math.abs(netAmount + whtAmount - gross) < 0.01
+  const balanceAfter = Math.max(balance - gross, 0)
+  const isFullSettle = gross >= balance - 0.01 && balance > 0
 
-  const handleWhtPctSelect = (pct) => {
-    setWhtPct(pct)
-    setCustomWHT(false)
-    setWhtManual('')
+  const handleWhtSelect = (pct) => {
+    setWhtPct(pct); setCustomMode(false); setWhtManual('')
+  }
+  const handleCustomMode = () => {
+    setCustomMode(true); setWhtPct(0); setWhtManual('')
   }
 
   const handleSave = async () => {
-    if (!gross || gross <= 0) { toast.error('Enter a valid amount.'); return }
-    if (gross > balance + 0.01) { toast.error(`Maximum is PKR ${balance.toLocaleString()}`); return }
+    if (!gross || gross <= 0)          { toast.error('Enter a valid gross amount.'); return }
+    if (gross > balance + 0.01)        { toast.error(`Maximum is PKR ${balance.toLocaleString()}`); return }
+    if (!splitValid)                   { toast.error('Net + WHT must equal Gross amount.'); return }
     setSaving(true)
     try {
       const res = await fetch(apiEndpoint, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount:    gross,
-          netAmount: applyWHT ? netAmount : gross,
-          whtPct:    applyWHT ? whtPct : 0,
-          whtAmount: applyWHT ? whtAmount : 0,
-          wallet,
-          date,
+          netAmount: netAmount,
+          whtPct:    whtPct,
+          whtAmount: whtAmount,
+          wallet, date,
           reference: reference || '',
           notes:     notes || '',
         }),
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error || 'Payment failed'); setSaving(false); return }
-      const label = isInbound ? 'received from' : 'paid to'
-      toast.success(`PKR ${gross.toLocaleString()} ${label} ${partyName} via ${wallet}${applyWHT ? ` · WHT PKR ${whtAmount.toLocaleString()}` : ''}`)
+      const verb = isInbound ? 'received from' : 'paid to'
+      toast.success(`PKR ${gross.toLocaleString()} ${verb} ${partyName}${whtAmount > 0 ? ` · WHT PKR ${whtAmount.toLocaleString()} → Tax Head` : ''}`)
       onSuccess(data)
     } catch { toast.error('Connection error.') }
     finally { setSaving(false) }
   }
 
+  // ── Styles ─────────────────────────────────────────────────────────────────
+  const tierBox = (extraStyle = {}) => ({
+    borderRadius: 10,
+    border: `1px solid rgba(${accentRgb},0.2)`,
+    background: `rgba(${accentRgb},0.05)`,
+    padding: '14px 16px',
+    ...extraStyle,
+  })
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
 
-        {/* Title */}
-        <div className="modal-title" style={{ color: accent }}>
+        {/* ── Header ── */}
+        <div className="modal-title" style={{ color: accent, marginBottom: 6 }}>
           {isInbound ? '💰 Receive Payment' : '💳 Pay Supplier'} — {docNumber}
         </div>
 
-        {/* Summary bar */}
-        <div style={{ padding: '10px 14px', borderRadius: 8, background: accentBg, border: `1px solid ${accentBorder}`, marginBottom: 14, fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {/* ── Party / Balance bar ── */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, marginBottom: 16,
+          padding: '8px 12px', borderRadius: 8,
+          background: `rgba(${accentRgb},0.06)`, border: `1px solid rgba(${accentRgb},0.2)` }}>
           <span><span style={{ color: 'var(--text-muted)' }}>Party: </span><strong>{partyName}</strong></span>
-          <span><span style={{ color: 'var(--text-muted)' }}>Total: </span><strong>PKR {Number(total).toLocaleString()}</strong></span>
-          <span><span style={{ color: 'var(--text-muted)' }}>Paid: </span><strong style={{ color: accent }}>PKR {Number(alreadyPaid).toLocaleString()}</strong></span>
-          <span><span style={{ color: 'var(--text-muted)' }}>Balance: </span><strong style={{ color: 'var(--red)' }}>PKR {balance.toLocaleString()}</strong></span>
+          <span><span style={{ color: 'var(--text-muted)' }}>Doc Total: </span><strong>PKR {Number(total).toLocaleString()}</strong></span>
+          <span><span style={{ color: 'var(--text-muted)' }}>Already Settled: </span><strong style={{ color: accent }}>PKR {Number(alreadyPaid).toLocaleString()}</strong></span>
+          <span><span style={{ color: 'var(--text-muted)' }}>Balance Due: </span><strong style={{ color: 'var(--red)' }}>PKR {balance.toLocaleString()}</strong></span>
         </div>
 
-        {/* Gross Amount */}
-        <div className="input-group" style={{ marginBottom: 12 }}>
-          <label className="input-label">{isInbound ? 'Amount Received (PKR) *' : 'Amount Paying (PKR) *'}</label>
+        {/* ══════════════════════════════════════════════════════
+            TIER 1 — GROSS SETTLEMENT AMOUNT
+        ══════════════════════════════════════════════════════ */}
+        <div style={tierBox({ marginBottom: 10 })}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+            Tier 1 — Gross Settlement Amount
+          </div>
           <input
-            type="number" className="input" autoFocus
-            style={{ fontWeight: 900, fontSize: 22, color: accent, borderColor: accent }}
-            value={grossAmount}
-            onChange={e => { setGrossAmount(e.target.value); setWhtManual('') }}
-            placeholder="0.00"
+            type="number" className="input" autoFocus placeholder="0.00"
+            style={{ fontWeight: 900, fontSize: 24, color: accent, borderColor: accent, marginBottom: 6 }}
+            value={grossStr}
+            onChange={e => { setGrossStr(e.target.value); setWhtManual('') }}
           />
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-            {gross >= balance && balance > 0 ? <span style={{ color: accent }}>✅ Full settlement</span>
-              : gross > 0 ? <span style={{ color: 'var(--amber)' }}>Remaining after: PKR {(balance - gross).toLocaleString()}</span>
-              : null}
+          <div style={{ fontSize: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {isFullSettle && <span style={{ color: accent, fontWeight: 700 }}>✅ Full settlement — clears balance</span>}
+            {gross > 0 && !isFullSettle && (
+              <span style={{ color: 'var(--amber)' }}>
+                ⏳ Partial — Balance after this entry: <strong>PKR {balanceAfter.toLocaleString()}</strong>
+              </span>
+            )}
+            {gross > balance + 0.01 && (
+              <span style={{ color: 'var(--red)', fontWeight: 700 }}>❌ Exceeds balance due of PKR {balance.toLocaleString()}</span>
+            )}
           </div>
         </div>
 
-        {/* ── WHT Section ── */}
-        <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: applyWHT ? 12 : 0 }}>
-            <input type="checkbox" checked={applyWHT} onChange={e => setApplyWHT(e.target.checked)} />
-            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--blue)' }}>🏛️ Apply Withholding Tax (WHT)</span>
-          </label>
+        {/* Arrow connector */}
+        <div style={{ textAlign: 'center', fontSize: 18, color: 'var(--text-muted)', margin: '2px 0', lineHeight: 1 }}>↓ splits into ↓</div>
 
-          {applyWHT && (
-            <>
-              {/* Preset buttons */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {WHT_PRESETS.map(p => (
-                  <button key={p} onClick={() => handleWhtPctSelect(p)}
-                    style={{ padding: '4px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(99,102,241,0.5)',
-                      background: !customWHT && whtPct === p ? 'rgba(99,102,241,0.3)' : 'transparent',
-                      color: !customWHT && whtPct === p ? '#fff' : 'var(--blue)' }}>
-                    {p}%
-                  </button>
-                ))}
-                <button onClick={() => { setCustomWHT(true); setWhtManual('') }}
-                  style={{ padding: '4px 10px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(99,102,241,0.5)',
-                    background: customWHT ? 'rgba(99,102,241,0.3)' : 'transparent',
-                    color: customWHT ? '#fff' : 'var(--blue)' }}>
-                  Custom %
+        {/* ══════════════════════════════════════════════════════
+            TIER 2 + TIER 3 SIDE BY SIDE
+        ══════════════════════════════════════════════════════ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, marginTop: 4 }}>
+
+          {/* TIER 2 — NET AMOUNT → WALLET */}
+          <div style={{
+            borderRadius: 10, padding: '14px 16px',
+            border: `1px solid ${isInbound ? 'rgba(34,197,94,0.35)' : 'rgba(245,158,11,0.35)'}`,
+            background: `rgba(${accentRgb},0.07)`,
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+              Tier 2 — Net {isInbound ? 'Received' : 'Paid'} → Wallet
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: accent, fontFamily: 'Orbitron,monospace', marginBottom: 10 }}>
+              PKR {netAmount.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              Actual cash {isInbound ? 'entering' : 'leaving'} the selected wallet
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {WALLETS.map(w => (
+                <button key={w} onClick={() => setWallet(w)}
+                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
+                    border: `1px solid ${wallet === w ? accent : 'var(--glass-border)'}`,
+                    background: wallet === w ? `rgba(${accentRgb},0.2)` : 'transparent',
+                    color: wallet === w ? accent : 'var(--text-muted)' }}>
+                  {w}
                 </button>
-                {customWHT && (
-                  <input type="number" className="input" min={0} max={100} step={0.5}
-                    style={{ width: 80, textAlign: 'center', borderColor: 'rgba(99,102,241,0.5)' }}
-                    placeholder="%" autoFocus
-                    onChange={e => { setWhtPct(parseFloat(e.target.value) || 0); setWhtManual('') }}
-                  />
-                )}
-              </div>
+              ))}
+            </div>
+          </div>
 
-              {/* WHT Amount + Breakdown */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 0 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label className="input-label">WHT Amount (auto / editable)</label>
-                  <input type="number" className="input" min={0}
-                    style={{ borderColor: 'rgba(99,102,241,0.5)', fontWeight: 700 }}
-                    value={whtManual !== '' ? whtManual : whtAmount.toFixed(2)}
-                    onChange={e => setWhtManual(e.target.value)}
-                  />
-                </div>
-                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(99,102,241,0.1)', fontSize: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Gross</span>
-                    <span style={{ fontWeight: 700 }}>PKR {gross.toLocaleString()}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--blue)' }}>WHT ({whtPct}%)</span>
-                    <span style={{ fontWeight: 700, color: 'var(--blue)' }}>− PKR {whtAmount.toLocaleString()}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(99,102,241,0.3)', paddingTop: 4 }}>
-                    <span style={{ color: accent, fontWeight: 700 }}>Net {isInbound ? 'Received' : 'Paid'}</span>
-                    <span style={{ fontWeight: 900, color: accent }}>PKR {netAmount.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          {/* TIER 3 — WHT TAX → TAX HEAD */}
+          <div style={{
+            borderRadius: 10, padding: '14px 16px',
+            border: '1px solid rgba(99,102,241,0.35)',
+            background: 'rgba(99,102,241,0.06)',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+              Tier 3 — Tax / WHT → Tax Head
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--blue)', fontFamily: 'Orbitron,monospace', marginBottom: 10 }}>
+              PKR {whtAmount.toLocaleString()}
+            </div>
+            {/* WHT presets */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+              <button onClick={() => handleWhtSelect(0)}
+                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, borderRadius: 5, cursor: 'pointer',
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  background: whtPct === 0 && !customMode && whtManual === '' ? 'rgba(99,102,241,0.25)' : 'transparent',
+                  color: 'var(--blue)' }}>None</button>
+              {WHT_PRESETS.map(p => (
+                <button key={p} onClick={() => handleWhtSelect(p)}
+                  style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, borderRadius: 5, cursor: 'pointer',
+                    border: '1px solid rgba(99,102,241,0.4)',
+                    background: !customMode && whtPct === p && p !== 0 ? 'rgba(99,102,241,0.25)' : 'transparent',
+                    color: 'var(--blue)' }}>
+                  {p}%
+                </button>
+              ))}
+              <button onClick={handleCustomMode}
+                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, borderRadius: 5, cursor: 'pointer',
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  background: customMode ? 'rgba(99,102,241,0.25)' : 'transparent',
+                  color: 'var(--blue)' }}>
+                Custom
+              </button>
+            </div>
+            {/* Custom input */}
+            {customMode && (
+              <input type="number" className="input" min={0} placeholder="PKR amount"
+                style={{ borderColor: 'rgba(99,102,241,0.5)', fontSize: 13, marginBottom: 4 }}
+                value={whtManual}
+                onChange={e => setWhtManual(e.target.value)}
+              />
+            )}
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+              Auto-posted to Tax Head ledger
+            </div>
+          </div>
         </div>
 
-        {/* Wallet selector */}
-        <div className="input-group" style={{ marginBottom: 12 }}>
-          <label className="input-label">{isInbound ? 'Received Into Wallet' : 'Paid From Wallet'}</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {WALLETS.map(w => (
-              <button key={w} onClick={() => setWallet(w)}
-                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${wallet === w ? accent : 'var(--glass-border)'}`,
-                  background: wallet === w ? (isInbound ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)') : 'transparent',
-                  color: wallet === w ? accent : 'var(--text-muted)' }}>
-                {w}
-              </button>
-            ))}
-          </div>
+        {/* ══════════════════════════════════════════════════════
+            VALIDATION BAR — Net + WHT = Gross
+        ══════════════════════════════════════════════════════ */}
+        <div style={{
+          padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+          background: splitValid ? 'rgba(34,197,94,0.08)' : 'rgba(220,38,38,0.08)',
+          border: `1px solid ${splitValid ? 'rgba(34,197,94,0.3)' : 'rgba(220,38,38,0.3)'}`,
+        }}>
+          <span style={{ fontWeight: 700, color: splitValid ? 'var(--green)' : 'var(--red)' }}>
+            {splitValid ? '✅ Split Validated' : '❌ Split Mismatch'}
+          </span>
+          <span style={{ color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+            Net <strong style={{ color: accent }}>PKR {netAmount.toLocaleString()}</strong>
+            {' '}+{' '}WHT <strong style={{ color: 'var(--blue)' }}>PKR {whtAmount.toLocaleString()}</strong>
+            {' '}={' '}<strong style={{ color: splitValid ? 'var(--green)' : 'var(--red)' }}>PKR {(netAmount + whtAmount).toLocaleString()}</strong>
+            {' '}/ Gross <strong>PKR {gross.toLocaleString()}</strong>
+          </span>
+          {gross > 0 && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              Balance after: <strong style={{ color: balanceAfter > 0 ? 'var(--amber)' : 'var(--green)' }}>
+                PKR {balanceAfter.toLocaleString()}
+              </strong>
+            </span>
+          )}
         </div>
 
         {/* Date + Reference + Notes */}
@@ -220,24 +279,22 @@ export default function UniversalPaymentModal({
           </div>
         </div>
 
-        {/* Net settlement reminder */}
-        {applyWHT && (
-          <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', marginBottom: 14, fontSize: 12, color: 'var(--blue)' }}>
-            📌 Gross PKR {gross.toLocaleString()} clears the balance. WHT PKR {whtAmount.toLocaleString()} posts to Tax Head. Net PKR {netAmount.toLocaleString()} hits <strong>{wallet}</strong>.
-          </div>
-        )}
-
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" style={{ flex: 2, background: isInbound ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.2)', border: `1px solid ${accent}`, color: accent, fontWeight: 700 }}
-            onClick={handleSave} disabled={saving}>
-            {saving ? '⏳ Processing…'
-              : applyWHT
-              ? `${isInbound ? '💰 Receive' : '💳 Pay'} PKR ${gross.toLocaleString()} · WHT PKR ${whtAmount.toLocaleString()}`
+          <button
+            className="btn btn-primary"
+            style={{ flex: 2, background: `rgba(${accentRgb},0.2)`, border: `1px solid ${accent}`, color: accent, fontWeight: 700 }}
+            onClick={handleSave}
+            disabled={saving || !splitValid || gross <= 0 || gross > balance + 0.01}>
+            {saving
+              ? '⏳ Processing…'
+              : whtAmount > 0
+              ? `${isInbound ? '💰 Receive' : '💳 Pay'} PKR ${gross.toLocaleString()} (Net ${netAmount.toLocaleString()} + WHT ${whtAmount.toLocaleString()})`
               : `${isInbound ? '💰 Receive' : '💳 Pay'} PKR ${gross.toLocaleString()} via ${wallet}`}
           </button>
         </div>
+
       </div>
     </div>
   )
