@@ -210,16 +210,29 @@ function DayBook() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [softDeleted, setSoftDeleted] = useState(new Set())
+  // Default month filter = current YYYY-MM
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7))
   // Ref map of id → undone flag — avoids stale closure issues with rapid deletes
   const undoneMap = React.useRef({})
 
+  // Build list of months that have entries (for the dropdown)
+  const availableMonths = useMemo(() => {
+    const seen = new Set()
+    for (const e of (data.dayBook || [])) {
+      const m = (e.date || '').slice(0, 7)
+      if (m) seen.add(m)
+    }
+    return [...seen].sort((a, b) => b.localeCompare(a))
+  }, [data.dayBook])
+
   const entries = useMemo(() => {
     let list = [...(data.dayBook || [])].sort((a, b) => new Date(b.date) - new Date(a.date))
+    if (monthFilter !== 'all') list = list.filter(e => (e.date || '').slice(0, 7) === monthFilter)
     if (search) list = list.filter(e => e.description?.toLowerCase().includes(search.toLowerCase()) || e.reference?.includes(search))
     if (typeFilter !== 'all') list = list.filter(e => e.type === typeFilter)
     list = list.filter(e => !softDeleted.has(e.id))
     return list
-  }, [data.dayBook, search, typeFilter, softDeleted])
+  }, [data.dayBook, search, typeFilter, softDeleted, monthFilter])
 
   // Totals based on type (reliable for both auto and manual entries)
   const totals = useMemo(() => {
@@ -421,8 +434,16 @@ function DayBook() {
       </div>
 
       <div className="search-bar">
-        <input className="input" style={{ maxWidth: 260 }} placeholder="🔍 Search entries..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input" style={{ maxWidth: 160 }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+        <input className="input" style={{ maxWidth: 220 }} placeholder="🔍 Search entries..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input" style={{ maxWidth: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="all">All Months</option>
+          {availableMonths.map(m => {
+            const [y, mo] = m.split('-')
+            const label = new Date(+y, +mo - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+            return <option key={m} value={m}>{label}</option>
+          })}
+        </select>
+        <select className="input" style={{ maxWidth: 140 }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
           <option value="all">All Types</option>
           {['income', 'expense', 'advance-given', 'advance-received', 'transfer'].map(t => <option key={t}>{t}</option>)}
         </select>
