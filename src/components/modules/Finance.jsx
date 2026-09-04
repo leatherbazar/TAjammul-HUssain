@@ -19,26 +19,30 @@ function WalletManager() {
 
   const walletKeys = { Cash: 'cash', Bank: 'bank', JazzCash: 'jazzcash', EasyPaisa: 'easypaisa' }
 
-  // Compute live balance from Day Book entries using entry TYPE (not debit/credit column)
-  // because manual entries may store amounts in either column inconsistently.
-  // type=income/advance-received → money IN (+), type=expense/advance-given → money OUT (-)
+  // Wallet balance = opening + type-based direction from Day Book entries
+  // income/advance-received = +IN, expense/advance-given = −OUT
+  // transfer: wallet=FROM (−), toWallet=TO (+)
   const walletBalances = useMemo(() => {
     const IN_TYPES  = new Set(['income', 'advance-received'])
     const OUT_TYPES = new Set(['expense', 'advance-given'])
     const result = {}
+    const allEntries = data.dayBook || []
     for (const [w, key] of Object.entries(walletKeys)) {
       const opening = data.wallets?.[key] || 0
       const wLower = w.toLowerCase().trim()
-      const entries = (data.dayBook || []).filter(e =>
-        typeof e.wallet === 'string' && e.wallet.toLowerCase().trim() === wLower
-      )
       let balance = opening
-      for (const e of entries) {
-        const amount = (parseFloat(e.debit) || 0) + (parseFloat(e.credit) || 0)
+      for (const e of allEntries) {
+        const amount = (parseFloat(e.debit) || 0) + (parseFloat(e.credit) || 0) + (parseFloat(e.amount) || 0)
         const t = (e.type || '').toLowerCase()
-        if (IN_TYPES.has(t))  balance += amount
-        else if (OUT_TYPES.has(t)) balance -= amount
-        // 'transfer' entries are neutral per-wallet (handled by two entries)
+        const fromW = typeof e.wallet   === 'string' ? e.wallet.toLowerCase().trim()   : ''
+        const toW   = typeof e.toWallet === 'string' ? e.toWallet.toLowerCase().trim() : ''
+        if (t === 'transfer') {
+          if (fromW === wLower) balance -= amount   // money leaves FROM wallet
+          if (toW   === wLower) balance += amount   // money arrives in TO wallet
+        } else if (fromW === wLower) {
+          if (IN_TYPES.has(t))  balance += amount
+          else if (OUT_TYPES.has(t)) balance -= amount
+        }
       }
       result[key] = balance
     }
@@ -196,8 +200,8 @@ function DayBook() {
   const { data, refreshData, currentCompany } = useApp()
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
-    type: 'income', description: '', debit: '', credit: '',
-    wallet: 'Cash', reference: '', category: '',
+    type: 'income', description: '', debit: '', credit: '', amount: '',
+    wallet: 'Cash', toWallet: 'Bank', reference: '', category: '',
     partyName: '', accountHeadID: '',
   })
   const [addingSaving, setAddingSaving] = useState(false)
@@ -217,27 +221,50 @@ function DayBook() {
     return list
   }, [data.dayBook, search, typeFilter, softDeleted])
 
-  const totals = useMemo(() => entries.reduce((acc, e) => ({ debit: acc.debit + (parseFloat(e.debit) || 0), credit: acc.credit + (parseFloat(e.credit) || 0) }), { debit: 0, credit: 0 }), [entries])
+  // Totals based on type (reliable for both auto and manual entries)
+  const totals = useMemo(() => {
+    const IN_TYPES  = new Set(['income', 'advance-received'])
+    const OUT_TYPES = new Set(['expense', 'advance-given'])
+    return entries.reduce((acc, e) => {
+      const amt = (parseFloat(e.debit) || 0) + (parseFloat(e.credit) || 0) + (parseFloat(e.amount) || 0)
+      const t = (e.type || '').toLowerCase()
+      if (IN_TYPES.has(t))   return { ...acc, debit:  acc.debit  + amt }
+      if (OUT_TYPES.has(t))  return { ...acc, credit: acc.credit + amt }
+      return acc
+    }, { debit: 0, credit: 0 })
+  }, [entries])
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleAdd = async () => {
     if (!form.description) { toast.error('Description required.'); return }
-    if (!form.debit && !form.credit) { toast.error('Enter debit or credit amount.'); return }
-    if (addingSaving) return  // prevent double-click
+    const isTransfer = form.type === 'transfer'
+    const transferAmt = parseFloat(form.amount) || 0
+    if (isTransfer && !transferAmt) { toast.error('Enter transfer amount.'); return }
+    if (isTransfer && form.wallet === form.toWallet) { toast.error('From and To wallets must be different.'); return }
+    if (!isTransfer && !form.debit && !form.credit) { toast.error('Enter debit or credit amount.'); return }
+    if (addingSaving) return
     setAddingSaving(true)
-    const entry = { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 }
     try {
-      const res = await fetch('/api/dayBook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...entry, id: Date.now().toString(), createdAt: new Date().toISOString() }),
-      })
-      const saved = await res.json()
-      if (!res.ok) { toast.error(saved.error || 'Failed to save entry'); return }
-      await refreshData()
-      setForm(f => ({ ...f, description: '', debit: '', credit: '', reference: '', category: '', partyName: '', accountHeadID: '' }))
-      toast.success('Entry added & ledger updated!')
+      if (isTransfer) {
+        const base = { date: form.date, type: 'transfer', description: form.description, reference: form.reference, amount: transferAmt, debit: transferAmt, credit: 0 }
+        const now = Date.now()
+        await fetch('/api/dayBook', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...base, id: now.toString(), wallet: form.wallet, toWallet: form.toWallet, category: `Transfer to ${form.toWallet}`, createdAt: new Date().toISOString() }) })
+        await fetch('/api/dayBook', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...base, id: (now + 1).toString(), wallet: form.toWallet, toWallet: form.wallet, category: `Transfer from ${form.wallet}`, createdAt: new Date().toISOString() }) })
+        await refreshData()
+        toast.success(`Transfer: ${form.wallet} → ${form.toWallet} PKR ${transferAmt.toLocaleString()}`)
+      } else {
+        const entry = { ...form, debit: parseFloat(form.debit) || 0, credit: parseFloat(form.credit) || 0 }
+        const res = await fetch('/api/dayBook', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...entry, id: Date.now().toString(), createdAt: new Date().toISOString() }) })
+        const saved = await res.json()
+        if (!res.ok) { toast.error(saved.error || 'Failed to save entry'); return }
+        await refreshData()
+        toast.success('Entry added & ledger updated!')
+      }
+      setForm(f => ({ ...f, description: '', debit: '', credit: '', amount: '', reference: '', category: '', partyName: '', accountHeadID: '' }))
     } catch {
       toast.error('Connection error.')
     } finally {
@@ -313,12 +340,20 @@ function DayBook() {
             </select>
           </div>
           <div className="input-group">
-            <label className="input-label">Wallet</label>
+            <label className="input-label">{form.type === 'transfer' ? 'From Wallet' : 'Wallet'}</label>
             <select className="input" value={form.wallet} onChange={e => setField('wallet', e.target.value)}>
               {WALLETS.map(w => <option key={w}>{w}</option>)}
             </select>
           </div>
-          <div className="input-group col-span-2">
+          {form.type === 'transfer' && (
+            <div className="input-group">
+              <label className="input-label">To Wallet</label>
+              <select className="input" value={form.toWallet} onChange={e => setField('toWallet', e.target.value)}>
+                {WALLETS.filter(w => w !== form.wallet).map(w => <option key={w}>{w}</option>)}
+              </select>
+            </div>
+          )}
+          <div className={form.type === 'transfer' ? 'input-group' : 'input-group col-span-2'}>
             <label className="input-label">Description *</label>
             <input className="input" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Payment received from / paid to..." spellCheck />
           </div>
@@ -346,14 +381,23 @@ function DayBook() {
             <label className="input-label">Reference</label>
             <input className="input" value={form.reference} onChange={e => setField('reference', e.target.value)} placeholder="INV-201, SO-..." />
           </div>
-          <div className="input-group">
-            <label className="input-label">Debit (PKR)</label>
-            <input type="number" className="input" min="0" value={form.debit} onChange={e => setField('debit', e.target.value)} placeholder="0.00" style={{ borderColor: form.debit ? 'var(--red)' : undefined }} />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Credit (PKR)</label>
-            <input type="number" className="input" min="0" value={form.credit} onChange={e => setField('credit', e.target.value)} placeholder="0.00" style={{ borderColor: form.credit ? 'var(--green)' : undefined }} />
-          </div>
+          {form.type === 'transfer' ? (
+            <div className="input-group">
+              <label className="input-label">Amount (PKR)</label>
+              <input type="number" className="input" min="0" value={form.amount} onChange={e => setField('amount', e.target.value)} placeholder="0.00" style={{ borderColor: form.amount ? 'var(--blue)' : undefined }} />
+            </div>
+          ) : (
+            <>
+              <div className="input-group">
+                <label className="input-label">Debit — Money IN (PKR)</label>
+                <input type="number" className="input" min="0" value={form.debit} onChange={e => { setField('debit', e.target.value); if (e.target.value) setField('credit', '') }} placeholder="0.00" style={{ borderColor: form.debit ? 'var(--green)' : undefined }} />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Credit — Money OUT (PKR)</label>
+                <input type="number" className="input" min="0" value={form.credit} onChange={e => { setField('credit', e.target.value); if (e.target.value) setField('debit', '') }} placeholder="0.00" style={{ borderColor: form.credit ? 'var(--red)' : undefined }} />
+              </div>
+            </>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button className="btn btn-primary w-full" onClick={handleAdd} disabled={addingSaving} style={addingSaving ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>{addingSaving ? '⏳ Saving…' : '+ Add Entry'}</button>
           </div>
@@ -362,13 +406,13 @@ function DayBook() {
 
       {/* Summary */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>TOTAL DEBIT</div>
-          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif' }}>PKR {totals.debit.toLocaleString()}</div>
-        </div>
         <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>TOTAL CREDIT</div>
-          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif' }}>PKR {totals.credit.toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>TOTAL INCOME (IN)</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: 'var(--green)' }}>PKR {totals.debit.toLocaleString()}</div>
+        </div>
+        <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>TOTAL EXPENSE (OUT)</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'Orbitron, sans-serif', color: 'var(--red)' }}>PKR {totals.credit.toLocaleString()}</div>
         </div>
         <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700 }}>NET BALANCE</div>
@@ -387,7 +431,7 @@ function DayBook() {
       <div className="table-wrapper">
         <table>
           <thead>
-            <tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Party</th><th>Ref</th><th>Wallet</th><th className="text-red">Debit (Dr)</th><th className="text-green">Credit (Cr)</th><th></th></tr>
+            <tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Party</th><th>Ref</th><th>Wallet</th><th className="text-green">Money IN</th><th className="text-red">Money OUT</th><th></th></tr>
           </thead>
           <tbody>
             {entries.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>No entries yet.</td></tr>}
@@ -412,9 +456,14 @@ function DayBook() {
                   ) : '—'}
                 </td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{e.reference || '—'}</td>
-                <td style={{ fontSize: 12 }}>{e.wallet}</td>
-                <td className="text-red bold">{e.debit ? `PKR ${Number(e.debit).toLocaleString()}` : '—'}</td>
-                <td className="text-green bold">{e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—'}</td>
+                <td style={{ fontSize: 12 }}>
+                  {e.wallet}
+                  {e.type === 'transfer' && e.toWallet && (
+                    <span style={{ fontSize: 10, color: 'var(--blue)', marginLeft: 4 }}>→ {e.toWallet}</span>
+                  )}
+                </td>
+                <td className="text-green bold">{(e.debit || e.amount) ? `PKR ${Number(e.debit || e.amount || 0).toLocaleString()}` : '—'}</td>
+                <td className="text-red bold">{e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—'}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-secondary btn-xs" onClick={() => setEditEntry(e)}>✏️</button>
