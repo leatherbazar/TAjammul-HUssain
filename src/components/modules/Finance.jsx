@@ -700,10 +700,12 @@ function TaxRegister() {
   }
 
   function exportCSV() {
-    const rows = [['Date', 'Party', 'Account Head', 'Doc Ref', 'WHT %', 'Gross Amount', 'WHT Amount', 'Party Type', 'Challan Status']]
+    const rows = [['Date', 'Party', 'Account Head', 'Doc Ref', 'WHT %', 'Gross Amount', 'WHT Amount', 'Net Amount', 'Party Type', 'Challan Status']]
     filtered.forEach(e => {
-      const wht = parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0
-      rows.push([e.date || '', e.partyName || '', e.accountHeadID || '', e.reference || '', e.whtPct || 0, parseFloat(e.grossAmount) || 0, wht, e.partyType || '', e.challanStatus || 'pending'])
+      const grossAmt = parseFloat(e.grossAmount) || 0
+      const wht = parseFloat(e.debit) || parseFloat(e.credit) || parseFloat(e.amount) || 0
+      const netAmt = Math.max(grossAmt - wht, 0)
+      rows.push([e.date || '', e.partyName || '', e.accountHeadID || '', e.reference || '', e.whtPct || 0, grossAmt, wht, netAmt, e.partyType || '', e.challanStatus || 'pending'])
     })
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -803,13 +805,15 @@ function TaxRegister() {
             <thead>
               <tr>
                 <th>Date</th><th>Party</th><th>Account Head</th><th>Doc Ref</th>
-                <th>WHT %</th><th>Gross Amt</th><th>WHT Amt</th>
+                <th>WHT %</th><th>Gross Amt</th><th>WHT Amt</th><th>Net Amt</th>
                 <th>Type</th><th>Challan</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(e => {
-                const wht = parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0
+                const grossAmt = parseFloat(e.grossAmount) || 0
+                const wht = parseFloat(e.debit) || parseFloat(e.credit) || parseFloat(e.amount) || 0
+                const netAmt = Math.max(grossAmt - wht, 0)
                 const status = e.challanStatus || 'pending'
                 return (
                   <tr key={e.id}>
@@ -817,9 +821,10 @@ function TaxRegister() {
                     <td className="bold">{e.partyName || '—'}</td>
                     <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.accountHeadID || '—'}</td>
                     <td style={{ fontSize: 11 }}>{e.reference || '—'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{e.whtPct != null ? `${e.whtPct}%` : '—'}</td>
-                    <td className="bold">PKR {(parseFloat(e.grossAmount) || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{e.whtPct ? `${e.whtPct}%` : '—'}</td>
+                    <td className="bold">PKR {grossAmt.toLocaleString()}</td>
                     <td className="bold" style={{ color: 'var(--amber)' }}>PKR {wht.toLocaleString()}</td>
+                    <td className="bold" style={{ color: 'var(--green)' }}>PKR {netAmt.toLocaleString()}</td>
                     <td>
                       <span className={`badge ${e.partyType === 'client' ? 'badge-paid' : 'badge-pending'}`} style={{ fontSize: 10 }}>
                         {e.partyType === 'client' ? '👤 Client' : '🏭 Supplier'}

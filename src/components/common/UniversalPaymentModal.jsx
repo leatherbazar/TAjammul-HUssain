@@ -68,6 +68,11 @@ export default function UniversalPaymentModal({
     setCustomMode(true); setWhtPct(0); setWhtManual('')
   }
 
+  // When custom PKR amount is entered, back-calculate the effective % for storage
+  const effectiveWhtPct = customMode && gross > 0
+    ? parseFloat((whtAmount / gross * 100).toFixed(4))
+    : whtPct
+
   const handleSave = async () => {
     if (!gross || gross <= 0)          { toast.error('Enter a valid gross amount.'); return }
     if (gross > balance + 0.01)        { toast.error(`Maximum is PKR ${balance.toLocaleString()}`); return }
@@ -78,10 +83,11 @@ export default function UniversalPaymentModal({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount:    gross,
-          netAmount: netAmount,
-          whtPct:    whtPct,
-          whtAmount: whtAmount,
+          amount:      gross,
+          grossAmount: gross,
+          netAmount:   netAmount,
+          whtPct:      effectiveWhtPct,
+          whtAmount:   whtAmount,
           wallet, date,
           reference: reference || '',
           notes:     notes || '',

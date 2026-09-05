@@ -699,10 +699,11 @@ app.put('/api/contacts/:id/reassign-id', async (req, res) => {
 // Used by Ledger module PaySupplier flow via UniversalPaymentModal
 app.post('/api/contacts/:id/pay-supplier', async (req, res) => {
   try {
-    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
-    const gross = parseFloat(amount) || 0
+    const { amount, grossAmount: bodyGross, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(bodyGross || amount) || 0
     const net   = parseFloat(netAmount) ?? gross
     const wht   = parseFloat(whtAmount) || 0
+    const pct   = parseFloat(whtPct) || 0
     if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
 
     const contact = await Contact.findOne({ id: req.params.id }).lean()
@@ -716,7 +717,7 @@ app.post('/api/contacts/:id/pay-supplier', async (req, res) => {
       accountHeadID: contact.accountHeadID,
       contactName:   contact.name,
       date:          txDate,
-      description:   `Payment to ${contact.name}${notes ? ': ' + notes : ''}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
+      description:   `Payment to ${contact.name}${notes ? ': ' + notes : ''}${wht > 0 ? ` (WHT ${pct}% = PKR ${wht})` : ''}`,
       documentRef:   docRef,
       documentType:  'payment',
       debit:         gross,
@@ -741,12 +742,12 @@ app.post('/api/contacts/:id/pay-supplier', async (req, res) => {
         date:         txDate,
         type:         'expense',
         category:     'WHT Payable (Tax)',
-        description:  `WHT ${whtPct}% on payment to ${contact.name}`,
+        description:  `WHT ${pct}% on payment to ${contact.name}`,
         partyName:    contact.name,
         accountHeadID: contact.accountHeadID || '',
         taxHeadID:    'TAX-WHT',
         reference:    docRef,
-        whtPct:       parseFloat(whtPct) || 0,
+        whtPct:       pct,
         grossAmount:  gross,
         wallet:       'Tax Head',
         partyType:    'supplier',
@@ -878,10 +879,11 @@ app.post('/api/invoices/fix-bad-numbers', async (req, res) => {
 // ── Record payment against an invoice (marks paid/partial + ledger + dayBook) ─
 app.post('/api/invoices/:id/payment', async (req, res) => {
   try {
-    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
-    const gross = parseFloat(amount) || 0       // clears balance
-    const net   = parseFloat(netAmount) ?? gross // hits wallet
+    const { amount, grossAmount: bodyGross, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(bodyGross || amount) || 0   // clears balance
+    const net   = parseFloat(netAmount) ?? gross          // hits wallet
     const wht   = parseFloat(whtAmount) || 0
+    const pct   = parseFloat(whtPct) || 0
     if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
 
     const invoice = await Invoice.findOne({ id: req.params.id }).lean()
@@ -907,7 +909,7 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
         accountHeadID: invoice.accountHeadID,
         contactName:   invoice.clientName,
         date:          txDate,
-        description:   `Payment received for ${invoice.number}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
+        description:   `Payment received for ${invoice.number}${wht > 0 ? ` (WHT ${pct}% = PKR ${wht})` : ''}`,
         documentRef:   invoice.number,
         documentType:  'payment',
         debit:         0,
@@ -939,12 +941,12 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
         date:         txDate,
         type:         'income',
         category:     'WHT Deducted (Tax)',
-        description:  `WHT ${whtPct}% on ${invoice.number} — ${invoice.clientName}`,
+        description:  `WHT ${pct}% on ${invoice.number} — ${invoice.clientName}`,
         partyName:    invoice.clientName || '',
         accountHeadID: invoice.accountHeadID || '',
         taxHeadID:    'TAX-WHT',
         reference:    invoice.number,
-        whtPct:       parseFloat(whtPct) || 0,
+        whtPct:       pct,
         grossAmount:  gross,
         debit:        wht,
         credit:       0,
@@ -1508,10 +1510,11 @@ app.post('/api/purchases', async (req, res) => {
 // ── Record payment to supplier (marks paid/partial + ledger + dayBook) ─────────
 app.post('/api/purchases/:id/payment', async (req, res) => {
   try {
-    const { amount, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
-    const gross = parseFloat(amount) || 0
+    const { amount, grossAmount: bodyGross, netAmount, whtPct = 0, whtAmount = 0, wallet, date, reference, notes } = req.body
+    const gross = parseFloat(bodyGross || amount) || 0
     const net   = parseFloat(netAmount) ?? gross
     const wht   = parseFloat(whtAmount) || 0
+    const pct   = parseFloat(whtPct) || 0
     if (gross <= 0) return res.status(400).json({ error: 'Amount must be > 0' })
 
     const purchase = await Purchase.findOne({ id: req.params.id }).lean()
@@ -1537,7 +1540,7 @@ app.post('/api/purchases/:id/payment', async (req, res) => {
         accountHeadID: purchase.accountHeadID,
         contactName:   purchase.supplierName,
         date:          txDate,
-        description:   `Payment to supplier for ${purchase.number}${wht > 0 ? ` (WHT ${whtPct}% = PKR ${wht})` : ''}`,
+        description:   `Payment to supplier for ${purchase.number}${wht > 0 ? ` (WHT ${pct}% = PKR ${wht})` : ''}`,
         documentRef:   purchase.number,
         documentType:  'payment',
         debit:         gross,
@@ -1569,12 +1572,12 @@ app.post('/api/purchases/:id/payment', async (req, res) => {
         date:         txDate,
         type:         'expense',
         category:     'WHT Payable (Tax)',
-        description:  `WHT ${whtPct}% on ${purchase.number} — ${purchase.supplierName}`,
+        description:  `WHT ${pct}% on ${purchase.number} — ${purchase.supplierName}`,
         partyName:    purchase.supplierName || '',
         accountHeadID: purchase.accountHeadID || '',
         taxHeadID:    'TAX-WHT',
         reference:    purchase.number,
-        whtPct:       parseFloat(whtPct) || 0,
+        whtPct:       pct,
         grossAmount:  gross,
         debit:        0,
         credit:       wht,
