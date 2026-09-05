@@ -240,6 +240,14 @@ export default function Quotations() {
 
   // Pick up Supply Order → Quotation navigation
   useEffect(() => {
+    // Open existing linked quotation (smart link from SO)
+    const openRef = sessionStorage.getItem('tat_open_quotation_ref')
+    if (openRef) {
+      sessionStorage.removeItem('tat_open_quotation_ref')
+      const found = (data.quotations || []).find(q => q.number === openRef)
+      if (found) { setSelected(found); setView('edit') }
+      return
+    }
     const pending = sessionStorage.getItem('tat_so_to_quotation')
     if (pending) {
       try {

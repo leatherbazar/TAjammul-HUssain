@@ -967,6 +967,14 @@ export default function Invoices() {
   // Pick up Supply Order → Invoice navigation
   const [fromSO, setFromSO] = useState(null)
   useEffect(() => {
+    // Open existing linked invoice (smart link from SO)
+    const openRef = sessionStorage.getItem('tat_open_invoice_ref')
+    if (openRef) {
+      sessionStorage.removeItem('tat_open_invoice_ref')
+      const found = (data.invoices || []).find(inv => inv.number === openRef)
+      if (found) { setSelected(found); setView('edit') }
+      return
+    }
     const pending = sessionStorage.getItem('tat_so_to_invoice')
     if (pending) {
       try {

@@ -1286,8 +1286,11 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
 
     let totalAmount = 0
     const purchaseItems = []
-    const fulfillmentType = order.fulfillmentType || 'warehouse'  // Fix 3: default warehouse
-    const isDirect = fulfillmentType === 'direct'
+    const fulfillmentType = order.fulfillmentType || 'warehouse'
+    // skipInventory: explicit flag from modal overrides fulfillmentType
+    // (allows warehouse SO to be received as direct if user unchecks "Add to Inventory")
+    const skipInventory = req.body.skipInventory === true || fulfillmentType === 'direct'
+    const isDirect = skipInventory  // used for DayBook category label
 
     for (const item of (order.items || [])) {
       const qty        = parseInt(item.qty) || 0
@@ -1297,8 +1300,8 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
       const amount     = qty * costPrice
       totalAmount     += amount
 
-      if (item.isService || isDirect) {
-        // ── Fix 1 / Fix 3: SERVICE or DIRECT — bypass inventory & stock movement ──
+      if (item.isService || skipInventory) {
+        // SERVICE items or explicit skipInventory (direct/B2B) — bypass inventory & stock movement
         purchaseItems.push({
           description:  item.description,
           color:        item.color || '',

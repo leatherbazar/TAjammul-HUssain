@@ -162,7 +162,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           <div className="input-group">
             <label className="input-label">Status</label>
             <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
-              {['pending', 'in-progress', 'sourced', 'delivered', 'cancelled'].map(s => <option key={s}>{s}</option>)}
+              {['pending', 'in-progress', 'sourced', 'received', 'delivered', 'cancelled'].map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           {/* Fix 3: Fulfillment Destination */}
@@ -368,26 +368,42 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
   const [date, setDate]   = useState(today)
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Determine default: skip inventory for direct/B2B orders or orders linked to a client doc
+  const isLinkedToClientDoc = !!(order.invoiceRef || order.quotationRef || order.clientInvoiceRef)
+  const isDirect = order.fulfillmentType === 'direct' || isLinkedToClientDoc
+  const [addToInventory, setAddToInventory] = useState(!isDirect)
+
   const totalAmount = (order.items || []).reduce((s, i) =>
     s + (parseInt(i.qty) || 0) * (parseFloat(i.purchasePrice || i.costPrice) || 0), 0)
 
   const go = async () => {
     setLoading(true)
-    try { await onConfirm({ date, notes }) }
+    try { await onConfirm({ date, notes, addToInventory }) }
     finally { setLoading(false) }
   }
 
+  const linkedRef = order.invoiceRef || order.quotationRef || order.clientInvoiceRef
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: 'linear-gradient(145deg,#1e1e32 0%,#16162a 100%)', borderRadius: 16, padding: 28, maxWidth: 500, width: '100%', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 32px 64px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.05)' }}>
+      <div style={{ background: 'linear-gradient(145deg,#1e1e32 0%,#16162a 100%)', borderRadius: 16, padding: 28, maxWidth: 520, width: '100%', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 32px 64px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.05)' }}>
         <h3 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 800, color: '#fff' }}>🏭 Confirm & Receive Stock</h3>
+
+        {/* Order summary */}
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 14, fontSize: 13 }}>
           <div style={{ fontWeight: 700 }}>{order.title} — {order.number}</div>
           <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
             Supplier: <strong style={{ color: 'var(--text)' }}>{order.supplierName || '—'}</strong> &nbsp;|&nbsp;
             Total: <strong style={{ color: 'var(--green)' }}>PKR {totalAmount.toLocaleString()}</strong>
           </div>
+          {linkedRef && (
+            <div style={{ marginTop: 6, fontSize: 11, color: '#818cf8', fontFamily: 'monospace' }}>
+              🔗 Linked to client doc: <strong>{linkedRef}</strong>
+            </div>
+          )}
         </div>
+
         <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
           <div className="input-group">
             <label className="input-label">Receive Date</label>
@@ -398,9 +414,41 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
             <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any remarks…" />
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--amber)', padding: '8px 12px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', marginBottom: 14 }}>
-          ⚠️ This will: add items to <strong>Inventory</strong> · create a <strong>Purchase #{order.number?.replace('SO-', 'PUR-')}</strong> · post <strong>PKR {totalAmount.toLocaleString()} to Supplier Ledger (AP)</strong>
+
+        {/* Inventory toggle */}
+        <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 14, border: `1px solid ${addToInventory ? 'rgba(34,197,94,0.35)' : 'rgba(99,102,241,0.35)'}`, background: addToInventory ? 'rgba(34,197,94,0.06)' : 'rgba(99,102,241,0.06)' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={addToInventory}
+              onChange={e => setAddToInventory(e.target.checked)}
+              style={{ accentColor: 'var(--green)', marginTop: 2, width: 16, height: 16, flexShrink: 0 }}
+            />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: addToInventory ? 'var(--green)' : '#818cf8' }}>
+                {addToInventory ? '🏭 Add to Warehouse Inventory' : '📦 Skip Inventory (Direct / B2B Fulfilment)'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                {addToInventory
+                  ? 'Goods will be added to stock. WAC recalculated. Stock Movement IN recorded.'
+                  : 'Goods go directly to the client. No stock change. Supplier AP and DayBook still posted.'}
+              </div>
+              {isLinkedToClientDoc && !addToInventory && (
+                <div style={{ fontSize: 11, color: '#818cf8', marginTop: 4 }}>
+                  ℹ️ Defaulted to Skip because this SO is linked to a client document ({linkedRef}).
+                </div>
+              )}
+            </div>
+          </label>
         </div>
+
+        {/* Summary of what will happen */}
+        <div style={{ fontSize: 12, color: 'var(--amber)', padding: '8px 12px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', marginBottom: 16 }}>
+          ⚠️ This will:
+          {addToInventory ? <> add items to <strong>Inventory</strong> ·</> : <> <span style={{ textDecoration: 'line-through', opacity: 0.5 }}>Inventory</span> (skipped) ·</>}
+          {' '}create <strong>Purchase record</strong> · post <strong>PKR {totalAmount.toLocaleString()} to Supplier Ledger (AP)</strong>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
           <button className="btn btn-primary" onClick={go} disabled={loading}>
@@ -417,6 +465,15 @@ export default function SupplyOrders({ isEmployee = false }) {
   const navigate = useNavigate()
 
   const goToInvoice = (o) => {
+    // If SO is already linked to an invoice, open that existing document
+    const existingRef = o.invoiceRef || o.clientInvoiceRef
+    if (existingRef) {
+      sessionStorage.setItem('tat_open_invoice_ref', existingRef)
+      navigate('/admin/invoices')
+      toast(`🧾 Opening existing invoice ${existingRef}`, { duration: 4000 })
+      return
+    }
+    // Otherwise create a new invoice pre-filled from this SO
     const payload = {
       supplyOrderRef: o.number,
       supplyOrderId: o.id,
@@ -437,6 +494,14 @@ export default function SupplyOrders({ isEmployee = false }) {
   }
 
   const goToQuotation = (o) => {
+    // If SO is already linked to a quotation, open that existing document
+    if (o.quotationRef) {
+      sessionStorage.setItem('tat_open_quotation_ref', o.quotationRef)
+      navigate('/admin/quotations')
+      toast(`📋 Opening existing quotation ${o.quotationRef}`, { duration: 4000 })
+      return
+    }
+    // Otherwise create a new quotation pre-filled from this SO
     const payload = {
       supplyOrderRef: o.number,
       items: (o.items || []).map(i => ({
@@ -519,16 +584,17 @@ export default function SupplyOrders({ isEmployee = false }) {
     } catch (err) { throw err }
   }
 
-  const handleReceive = async (order, { date, notes }) => {
+  const handleReceive = async (order, { date, notes, addToInventory }) => {
     try {
       const res = await fetch(`/api/purchases/from-supply-order/${order.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, notes }),
+        body: JSON.stringify({ date, notes, skipInventory: !addToInventory }),
       })
       const result = await res.json()
       if (!res.ok) { toast.error(result.error || 'Conversion failed'); return }
-      toast.success(`Stock received! ${result.purchase?.number} created. Inventory & Supplier Ledger updated.`)
+      const invMsg = addToInventory ? 'Inventory & Supplier Ledger updated.' : 'Supplier Ledger updated (inventory skipped — Direct/B2B).'
+      toast.success(`Purchase ${result.purchase?.number} created. ${invMsg}`)
       setReceiveModal(null)
       await refreshData()
     } catch (err) {
@@ -589,9 +655,9 @@ export default function SupplyOrders({ isEmployee = false }) {
                   <select
                     value={o.status}
                     onChange={e => updateRecord('supplyOrders', o.id, { ...o, status: e.target.value })}
-                    style={{ fontSize: 11, fontWeight: 700, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--glass-border)', background: 'var(--glass)', color: o.status === 'delivered' ? 'var(--green)' : o.status === 'cancelled' ? '#f87171' : o.status === 'sourced' ? '#818cf8' : 'var(--amber)', cursor: 'pointer', textTransform: 'capitalize' }}
+                    style={{ fontSize: 11, fontWeight: 700, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--glass-border)', background: 'var(--glass)', color: o.status === 'delivered' ? 'var(--green)' : o.status === 'received' ? '#34d399' : o.status === 'cancelled' ? '#f87171' : o.status === 'sourced' ? '#818cf8' : 'var(--amber)', cursor: 'pointer', textTransform: 'capitalize' }}
                   >
-                    {['pending', 'in-progress', 'sourced', 'delivered', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {['pending', 'in-progress', 'sourced', 'received', 'delivered', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
                 <td>
