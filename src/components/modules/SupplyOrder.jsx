@@ -53,17 +53,32 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
     const rec = opt.record
     const items = (rec.items || []).map(i => {
       const qty = i.useMatrix ? calcMatrixTotal(i.matrixRows || []) : (parseInt(i.qty) || 1)
-      return { id: Date.now() + Math.random(), description: i.description || '', color: i.color || '', qty, marketPrice: parseFloat(i.unitPrice) || 0, useMatrix: false, matrixRows: [], note: '' }
+      return {
+        id: Date.now() + Math.random(),
+        description:   i.description || '',
+        color:         i.color || '',
+        qty,
+        // purchasePrice must be filled by user — leave blank so they notice
+        purchasePrice: 0,
+        // marketPrice comes from the client quotation/invoice selling price
+        marketPrice:   parseFloat(i.unitPrice || i.salePrice || i.marketPrice) || 0,
+        useMatrix:     false,
+        matrixRows:    [],
+        note:          '',
+      }
     })
     setForm(f => ({
       ...f,
       items,
-      title: f.title || [rec.number, rec.title || rec.subject].filter(Boolean).join(' — '),
-      notes: rec.notes || f.notes,
-      quotationRef: srcType === 'quotation' ? rec.number : f.quotationRef,
-      invoiceRef:   srcType === 'invoice'   ? rec.number : f.invoiceRef,
+      title:            f.title || [rec.number, rec.title || rec.subject || rec.clientName].filter(Boolean).join(' — '),
+      notes:            rec.notes || f.notes,
+      quotationRef:     srcType === 'quotation' ? rec.number : f.quotationRef,
+      invoiceRef:       srcType === 'invoice'   ? rec.number : f.invoiceRef,
+      clientInvoiceRef: srcType === 'invoice'   ? rec.number : f.clientInvoiceRef,
+      // B2B: goods from client doc never touch our warehouse
+      fulfillmentType:  'direct',
     }))
-    toast.success(`Loaded ${items.length} item(s) from ${opt.label}`)
+    toast(`📦 ${items.length} item(s) loaded from ${opt.label}. This SO is set to B2B/Direct — goods won't enter inventory. Fill in Purchase Price per item.`, { duration: 6000 })
     setSrcId('')
   }
 
@@ -369,21 +384,28 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Determine default: skip inventory for direct/B2B orders or orders linked to a client doc
+  // B2B/Direct = linked to a client doc OR fulfillmentType explicitly set to direct
   const isLinkedToClientDoc = !!(order.invoiceRef || order.quotationRef || order.clientInvoiceRef)
-  const isDirect = order.fulfillmentType === 'direct' || isLinkedToClientDoc
-  const [addToInventory, setAddToInventory] = useState(!isDirect)
+  const isB2B = order.fulfillmentType === 'direct' || isLinkedToClientDoc
+  // For B2B orders inventory is LOCKED OFF — not just a default
+  const [addToInventory, setAddToInventory] = useState(!isB2B)
 
   const totalAmount = (order.items || []).reduce((s, i) =>
     s + (parseInt(i.qty) || 0) * (parseFloat(i.purchasePrice || i.costPrice) || 0), 0)
 
+  const missingSupplier = !order.supplierName
+  const missingPrice   = totalAmount === 0
+
   const go = async () => {
+    if (missingSupplier) { toast.error('Supplier name is missing — edit this SO and save it first.'); return }
+    if (missingPrice)    { toast.error('Purchase price is PKR 0 — edit this SO, set purchase prices, then save.'); return }
     setLoading(true)
     try { await onConfirm({ date, notes, addToInventory }) }
     finally { setLoading(false) }
   }
 
   const linkedRef = order.invoiceRef || order.quotationRef || order.clientInvoiceRef
+  const canConfirm = !missingSupplier && !missingPrice
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
@@ -394,8 +416,9 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 14, fontSize: 13 }}>
           <div style={{ fontWeight: 700 }}>{order.title} — {order.number}</div>
           <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
-            Supplier: <strong style={{ color: 'var(--text)' }}>{order.supplierName || '—'}</strong> &nbsp;|&nbsp;
-            Total: <strong style={{ color: 'var(--green)' }}>PKR {totalAmount.toLocaleString()}</strong>
+            Supplier: <strong style={{ color: missingSupplier ? '#f87171' : 'var(--text)' }}>{order.supplierName || '⚠️ NOT SET'}</strong>
+            &nbsp;|&nbsp;
+            Total: <strong style={{ color: missingPrice ? '#f87171' : 'var(--green)' }}>PKR {totalAmount.toLocaleString()}{missingPrice ? ' ⚠️' : ''}</strong>
           </div>
           {linkedRef && (
             <div style={{ marginTop: 6, fontSize: 11, color: '#818cf8', fontFamily: 'monospace' }}>
@@ -403,6 +426,15 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
             </div>
           )}
         </div>
+
+        {/* Blocking errors */}
+        {(missingSupplier || missingPrice) && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', marginBottom: 14, fontSize: 12 }}>
+            <div style={{ fontWeight: 700, color: '#f87171', marginBottom: 4 }}>❌ Cannot proceed — fix these first:</div>
+            {missingSupplier && <div style={{ color: '#fca5a5' }}>• Supplier name is missing. Edit this SO, select the supplier, and save.</div>}
+            {missingPrice    && <div style={{ color: '#fca5a5' }}>• Purchase price is PKR 0. Edit this SO, enter purchase prices, and save.</div>}
+          </div>
+        )}
 
         <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
           <div className="input-group">
@@ -415,34 +447,35 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
           </div>
         </div>
 
-        {/* Inventory toggle */}
-        <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 14, border: `1px solid ${addToInventory ? 'rgba(34,197,94,0.35)' : 'rgba(99,102,241,0.35)'}`, background: addToInventory ? 'rgba(34,197,94,0.06)' : 'rgba(99,102,241,0.06)' }}>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        {/* Inventory toggle — LOCKED for B2B, adjustable for warehouse */}
+        <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 14, border: `1px solid ${addToInventory ? 'rgba(34,197,94,0.35)' : 'rgba(99,102,241,0.35)'}`, background: addToInventory ? 'rgba(34,197,94,0.06)' : 'rgba(99,102,241,0.06)', opacity: isB2B ? 0.85 : 1 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: isB2B ? 'not-allowed' : 'pointer' }}>
             <input
               type="checkbox"
               checked={addToInventory}
-              onChange={e => setAddToInventory(e.target.checked)}
+              disabled={isB2B}
+              onChange={e => !isB2B && setAddToInventory(e.target.checked)}
               style={{ accentColor: 'var(--green)', marginTop: 2, width: 16, height: 16, flexShrink: 0 }}
             />
             <div>
               <div style={{ fontWeight: 700, fontSize: 13, color: addToInventory ? 'var(--green)' : '#818cf8' }}>
-                {addToInventory ? '🏭 Add to Warehouse Inventory' : '📦 Skip Inventory (Direct / B2B Fulfilment)'}
+                {addToInventory ? '🏭 Add to Warehouse Inventory' : '📦 Skip Inventory — B2B / Direct to Client'}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
                 {addToInventory
                   ? 'Goods will be added to stock. WAC recalculated. Stock Movement IN recorded.'
-                  : 'Goods go directly to the client. No stock change. Supplier AP and DayBook still posted.'}
+                  : 'Goods go directly to the client — never enter our warehouse.'}
               </div>
-              {isLinkedToClientDoc && !addToInventory && (
-                <div style={{ fontSize: 11, color: '#818cf8', marginTop: 4 }}>
-                  ℹ️ Defaulted to Skip because this SO is linked to a client document ({linkedRef}).
+              {isB2B && (
+                <div style={{ fontSize: 11, color: '#818cf8', marginTop: 4, fontWeight: 600 }}>
+                  🔒 Locked — this SO is linked to a client document ({linkedRef || order.fulfillmentType}). Inventory is always skipped for B2B orders.
                 </div>
               )}
             </div>
           </label>
         </div>
 
-        {/* Summary of what will happen */}
+        {/* Summary */}
         <div style={{ fontSize: 12, color: 'var(--amber)', padding: '8px 12px', borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', marginBottom: 16 }}>
           ⚠️ This will:
           {addToInventory ? <> add items to <strong>Inventory</strong> ·</> : <> <span style={{ textDecoration: 'line-through', opacity: 0.5 }}>Inventory</span> (skipped) ·</>}
@@ -451,7 +484,8 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={go} disabled={loading}>
+          <button className="btn btn-primary" onClick={go} disabled={loading || !canConfirm}
+            style={{ opacity: (!canConfirm || loading) ? 0.45 : 1, cursor: !canConfirm ? 'not-allowed' : 'pointer' }}>
             {loading ? '⏳ Processing…' : '✅ Confirm & Receive'}
           </button>
         </div>
