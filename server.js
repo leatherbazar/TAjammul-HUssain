@@ -1198,6 +1198,27 @@ app.post('/api/supplyOrders', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Supply Order UPDATE — was missing; caused all SO edits to silently fail ───
+app.put('/api/supplyOrders/:id', async (req, res) => {
+  try {
+    // Re-resolve accountHeadID if supplier name changed
+    let body = { ...req.body }
+    if (body.supplierName && !body.accountHeadID) {
+      body.accountHeadID = await autoRegisterContact(body.supplierName, 'supplier', body.supplierContact, body.companyId)
+    }
+    let doc = await models.supplyOrders.findOneAndUpdate(
+      { id: req.params.id }, { $set: body }, { new: true }
+    ).lean()
+    if (!doc) {
+      doc = await models.supplyOrders.findByIdAndUpdate(
+        req.params.id, { $set: body }, { new: true }
+      ).lean().catch(() => null)
+    }
+    if (!doc) return res.status(404).json({ error: 'Supply order not found' })
+    res.json(fmtLean(doc))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  PURCHASES  (Inward stock + Supplier AP ledger)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1371,9 +1392,21 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
     }
 
     // ── SUPPLIER LEDGER: Credit = goods received (AP — we owe supplier) ──────
-    if (order.accountHeadID && totalAmount > 0) {
+    // If accountHeadID is missing on the SO (e.g. SO was saved before supplier
+    // was filled in, or the edit failed to persist), look it up / auto-register now.
+    let supplierAccountHeadID = order.accountHeadID
+    if (!supplierAccountHeadID && order.supplierName) {
+      supplierAccountHeadID = await autoRegisterContact(
+        order.supplierName, 'supplier', order.supplierContact, order.companyId
+      )
+      // Patch the SO record so future operations have it
+      await models.supplyOrders.findOneAndUpdate(
+        { id: order.id }, { $set: { accountHeadID: supplierAccountHeadID } }
+      )
+    }
+    if (supplierAccountHeadID && totalAmount > 0) {
       await postLedgerEntry({
-        accountHeadID: order.accountHeadID,
+        accountHeadID: supplierAccountHeadID,
         contactName:   order.supplierName,
         date:          purchaseDate,
         description:   `${isDirect ? 'Direct/B2B' : 'Stock'} Purchase: ${number} (SO: ${order.number})`,
