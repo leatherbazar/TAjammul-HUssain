@@ -162,7 +162,7 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           <div className="input-group">
             <label className="input-label">Status</label>
             <select className="input" value={form.status} onChange={e => setField('status', e.target.value)}>
-              {['pending', 'in-progress', 'sourced', 'received', 'delivered', 'cancelled'].map(s => <option key={s}>{s}</option>)}
+              {['pending', 'in-progress', 'sourced', 'received', 'cancelled'].map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           {/* Fix 3: Fulfillment Destination */}
@@ -655,9 +655,9 @@ export default function SupplyOrders({ isEmployee = false }) {
                   <select
                     value={o.status}
                     onChange={e => updateRecord('supplyOrders', o.id, { ...o, status: e.target.value })}
-                    style={{ fontSize: 11, fontWeight: 700, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--glass-border)', background: 'var(--glass)', color: o.status === 'delivered' ? 'var(--green)' : o.status === 'received' ? '#34d399' : o.status === 'cancelled' ? '#f87171' : o.status === 'sourced' ? '#818cf8' : 'var(--amber)', cursor: 'pointer', textTransform: 'capitalize' }}
+                    style={{ fontSize: 11, fontWeight: 700, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--glass-border)', background: 'var(--glass)', color: o.status === 'received' ? '#34d399' : o.status === 'cancelled' ? '#f87171' : o.status === 'sourced' ? '#818cf8' : 'var(--amber)', cursor: 'pointer', textTransform: 'capitalize' }}
                   >
-                    {['pending', 'in-progress', 'sourced', 'received', 'delivered', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {['pending', 'in-progress', 'sourced', 'received', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
                 <td>
