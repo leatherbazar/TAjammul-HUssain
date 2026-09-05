@@ -618,6 +618,234 @@ function Advances() {
   )
 }
 
+function TaxRegister() {
+  const { data, refreshData } = useApp()
+  const [monthFilter, setMonthFilter] = useState('')
+  const [partyFilter, setPartyFilter] = useState('')
+  const [whtFilter, setWhtFilter] = useState('')
+  const [challanFilter, setChallanFilter] = useState('')
+  const [updating, setUpdating] = useState(null)
+
+  const whtEntries = useMemo(() => {
+    return (data.dayBook || []).filter(e => (e.wallet || '').toLowerCase() === 'tax head')
+  }, [data.dayBook])
+
+  const months = useMemo(() => {
+    const s = new Set()
+    whtEntries.forEach(e => { if (e.date) s.add(e.date.slice(0, 7)) })
+    return [...s].sort().reverse()
+  }, [whtEntries])
+
+  const parties = useMemo(() => {
+    const s = new Set()
+    whtEntries.forEach(e => { if (e.partyName) s.add(e.partyName) })
+    return [...s].sort()
+  }, [whtEntries])
+
+  const whtPcts = useMemo(() => {
+    const s = new Set()
+    whtEntries.forEach(e => { if (e.whtPct != null) s.add(String(e.whtPct)) })
+    return [...s].sort((a, b) => parseFloat(a) - parseFloat(b))
+  }, [whtEntries])
+
+  const filtered = useMemo(() => {
+    return whtEntries.filter(e => {
+      if (monthFilter && !(e.date || '').startsWith(monthFilter)) return false
+      if (partyFilter && e.partyName !== partyFilter) return false
+      if (whtFilter && String(e.whtPct) !== whtFilter) return false
+      if (challanFilter && (e.challanStatus || 'pending') !== challanFilter) return false
+      return true
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  }, [whtEntries, monthFilter, partyFilter, whtFilter, challanFilter])
+
+  const partySummary = useMemo(() => {
+    const map = {}
+    filtered.forEach(e => {
+      const key = e.partyName || '(Unknown Party)'
+      if (!map[key]) map[key] = { partyName: key, accountHeadID: e.accountHeadID || '', count: 0, totalGross: 0, totalWHT: 0, pending: 0, obtained: 0 }
+      const wht = parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0
+      const gross = parseFloat(e.grossAmount) || 0
+      map[key].count++
+      map[key].totalGross += gross
+      map[key].totalWHT += wht
+      if ((e.challanStatus || 'pending') === 'obtained') map[key].obtained++
+      else map[key].pending++
+    })
+    return Object.values(map).sort((a, b) => b.totalWHT - a.totalWHT)
+  }, [filtered])
+
+  const totals = useMemo(() => ({
+    gross: filtered.reduce((s, e) => s + (parseFloat(e.grossAmount) || 0), 0),
+    wht: filtered.reduce((s, e) => s + (parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0), 0),
+    pending: filtered.filter(e => (e.challanStatus || 'pending') === 'pending').length,
+    obtained: filtered.filter(e => e.challanStatus === 'obtained').length,
+  }), [filtered])
+
+  async function toggleChallan(entry) {
+    const newStatus = (entry.challanStatus || 'pending') === 'pending' ? 'obtained' : 'pending'
+    setUpdating(entry.id)
+    try {
+      await fetch(`/api/dayBook/${entry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...entry, challanStatus: newStatus })
+      })
+      await refreshData()
+      toast.success(`Challan marked ${newStatus}`)
+    } catch {
+      toast.error('Update failed')
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  function exportCSV() {
+    const rows = [['Date', 'Party', 'Account Head', 'Doc Ref', 'WHT %', 'Gross Amount', 'WHT Amount', 'Party Type', 'Challan Status']]
+    filtered.forEach(e => {
+      const wht = parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0
+      rows.push([e.date || '', e.partyName || '', e.accountHeadID || '', e.reference || '', e.whtPct || 0, parseFloat(e.grossAmount) || 0, wht, e.partyType || '', e.challanStatus || 'pending'])
+    })
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `tax-register-${monthFilter || 'all'}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="section-box">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div className="section-title" style={{ marginBottom: 0 }}>🧾 Tax Deduction Register (WHT)</div>
+        <button className="btn btn-secondary btn-sm" onClick={exportCSV}>📥 Export CSV</button>
+      </div>
+
+      {/* Summary Cards */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        {[
+          { label: 'Total Gross', value: `PKR ${totals.gross.toLocaleString()}`, color: 'var(--blue)' },
+          { label: 'Total WHT Deducted', value: `PKR ${totals.wht.toLocaleString()}`, color: 'var(--amber)' },
+          { label: 'Challan Pending', value: totals.pending, color: 'var(--red)' },
+          { label: 'Challan Obtained', value: totals.obtained, color: 'var(--green)' },
+        ].map(c => (
+          <div key={c.label} className="wallet-card glass" style={{ padding: '12px 18px', minWidth: 140 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{c.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: c.color }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <select className="input" style={{ width: 150 }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+          <option value="">All Months</option>
+          {months.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <select className="input" style={{ width: 180 }} value={partyFilter} onChange={e => setPartyFilter(e.target.value)}>
+          <option value="">All Parties</option>
+          {parties.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select className="input" style={{ width: 120 }} value={whtFilter} onChange={e => setWhtFilter(e.target.value)}>
+          <option value="">All WHT %</option>
+          {whtPcts.map(p => <option key={p} value={p}>{p}%</option>)}
+        </select>
+        <select className="input" style={{ width: 150 }} value={challanFilter} onChange={e => setChallanFilter(e.target.value)}>
+          <option value="">All Challan Status</option>
+          <option value="pending">Pending</option>
+          <option value="obtained">Obtained</option>
+        </select>
+        {(monthFilter || partyFilter || whtFilter || challanFilter) && (
+          <button className="btn btn-secondary btn-sm" onClick={() => { setMonthFilter(''); setPartyFilter(''); setWhtFilter(''); setChallanFilter('') }}>✕ Clear</button>
+        )}
+      </div>
+
+      {/* Party Summary */}
+      {partySummary.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase' }}>Party-wise Summary</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Party</th><th>Account Head</th><th>Transactions</th>
+                  <th>Total Gross</th><th>Total WHT</th><th>Pending</th><th>Obtained</th>
+                </tr>
+              </thead>
+              <tbody>
+                {partySummary.map(p => (
+                  <tr key={p.partyName}>
+                    <td className="bold">{p.partyName}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.accountHeadID || '—'}</td>
+                    <td style={{ textAlign: 'center' }}>{p.count}</td>
+                    <td className="bold">PKR {p.totalGross.toLocaleString()}</td>
+                    <td className="bold" style={{ color: 'var(--amber)' }}>PKR {p.totalWHT.toLocaleString()}</td>
+                    <td style={{ color: p.pending > 0 ? 'var(--red)' : 'var(--text-muted)', fontWeight: p.pending > 0 ? 700 : 400 }}>{p.pending}</td>
+                    <td style={{ color: p.obtained > 0 ? 'var(--green)' : 'var(--text-muted)', fontWeight: p.obtained > 0 ? 700 : 400 }}>{p.obtained}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Line Items */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase' }}>
+        Transaction Detail ({filtered.length} entries)
+      </div>
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+          No WHT entries found. WHT deductions appear here when payments include a WHT amount.
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>Date</th><th>Party</th><th>Account Head</th><th>Doc Ref</th>
+                <th>WHT %</th><th>Gross Amt</th><th>WHT Amt</th>
+                <th>Type</th><th>Challan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(e => {
+                const wht = parseFloat(e.amount) || parseFloat(e.debit) || parseFloat(e.credit) || 0
+                const status = e.challanStatus || 'pending'
+                return (
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{e.date}</td>
+                    <td className="bold">{e.partyName || '—'}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.accountHeadID || '—'}</td>
+                    <td style={{ fontSize: 11 }}>{e.reference || '—'}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{e.whtPct != null ? `${e.whtPct}%` : '—'}</td>
+                    <td className="bold">PKR {(parseFloat(e.grossAmount) || 0).toLocaleString()}</td>
+                    <td className="bold" style={{ color: 'var(--amber)' }}>PKR {wht.toLocaleString()}</td>
+                    <td>
+                      <span className={`badge ${e.partyType === 'client' ? 'badge-paid' : 'badge-pending'}`} style={{ fontSize: 10 }}>
+                        {e.partyType === 'client' ? '👤 Client' : '🏭 Supplier'}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className={`btn btn-xs ${status === 'obtained' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => toggleChallan(e)}
+                        disabled={updating === e.id}
+                        style={{ minWidth: 80, fontSize: 10 }}
+                      >
+                        {updating === e.id ? '...' : status === 'obtained' ? '✅ Obtained' : '⏳ Pending'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Finance() {
   const [tab, setTab] = useState('daybook')
 
@@ -630,13 +858,14 @@ export default function Finance() {
       <WalletManager />
 
       <div className="tabs">
-        {[['daybook', '📒 Day Book'], ['advances', '💳 Advances']].map(([key, label]) => (
+        {[['daybook', '📒 Day Book'], ['advances', '💳 Advances'], ['taxreg', '🧾 Tax Register']].map(([key, label]) => (
           <button key={key} className={`tab-btn ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
 
       {tab === 'daybook' && <DayBook />}
       {tab === 'advances' && <Advances />}
+      {tab === 'taxreg' && <TaxRegister />}
     </div>
   )
 }

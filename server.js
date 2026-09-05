@@ -737,13 +737,24 @@ app.post('/api/contacts/:id/pay-supplier', async (req, res) => {
     // WHT entry
     if (wht > 0) {
       await models.dayBook.create({
-        id: (Date.now() + 1).toString(), date: txDate, type: 'expense',
-        category: 'WHT Payable (Tax)',
-        description: `WHT ${whtPct}% on payment to ${contact.name}`,
-        partyName: contact.name, accountHeadID: 'TAX-WHT',
-        reference: docRef, wallet: 'Tax Head',
-        debit: 0, credit: wht,
-        companyId: contact.companyId || 'TAT',
+        id:           (Date.now() + 1).toString(),
+        date:         txDate,
+        type:         'expense',
+        category:     'WHT Payable (Tax)',
+        description:  `WHT ${whtPct}% on payment to ${contact.name}`,
+        partyName:    contact.name,
+        accountHeadID: contact.accountHeadID || '',
+        taxHeadID:    'TAX-WHT',
+        reference:    docRef,
+        whtPct:       parseFloat(whtPct) || 0,
+        grossAmount:  gross,
+        wallet:       'Tax Head',
+        partyType:    'supplier',
+        challanStatus: 'pending',
+        debit:        0,
+        credit:       wht,
+        notes:        notes || '',
+        companyId:    contact.companyId || 'TAT',
       })
     }
 
@@ -924,19 +935,24 @@ app.post('/api/invoices/:id/payment', async (req, res) => {
     // ── WHT: post to tax head if applicable ───────────────────────────────────
     if (wht > 0) {
       await models.dayBook.create({
-        id:          (Date.now() + 1).toString(),
-        date:        txDate,
-        type:        'income',
-        category:    'WHT Deducted (Tax)',
-        description: `WHT ${whtPct}% on ${invoice.number} — ${invoice.clientName}`,
-        partyName:   invoice.clientName || '',
-        accountHeadID: 'TAX-WHT',
-        reference:   invoice.number,
-        debit:       wht,
-        credit:      0,
-        wallet:      'Tax Head',
-        notes:       `WHT withheld at source`,
-        companyId:   invoice.companyId || 'TAT',
+        id:           (Date.now() + 1).toString(),
+        date:         txDate,
+        type:         'income',
+        category:     'WHT Deducted (Tax)',
+        description:  `WHT ${whtPct}% on ${invoice.number} — ${invoice.clientName}`,
+        partyName:    invoice.clientName || '',
+        accountHeadID: invoice.accountHeadID || '',
+        taxHeadID:    'TAX-WHT',
+        reference:    invoice.number,
+        whtPct:       parseFloat(whtPct) || 0,
+        grossAmount:  gross,
+        debit:        wht,
+        credit:       0,
+        wallet:       'Tax Head',
+        partyType:    'client',
+        challanStatus: 'pending',
+        notes:        notes || '',
+        companyId:    invoice.companyId || 'TAT',
       })
     }
 
@@ -1549,19 +1565,24 @@ app.post('/api/purchases/:id/payment', async (req, res) => {
     // ── WHT: post to tax head as payable ──────────────────────────────────────
     if (wht > 0) {
       await models.dayBook.create({
-        id:          (Date.now() + 1).toString(),
-        date:        txDate,
-        type:        'expense',
-        category:    'WHT Payable (Tax)',
-        description: `WHT ${whtPct}% on ${purchase.number} — ${purchase.supplierName}`,
-        partyName:   purchase.supplierName || '',
-        accountHeadID: 'TAX-WHT',
-        reference:   purchase.number,
-        debit:       0,
-        credit:      wht,
-        wallet:      'Tax Head',
-        notes:       `WHT deducted at source`,
-        companyId:   purchase.companyId || 'TAT',
+        id:           (Date.now() + 1).toString(),
+        date:         txDate,
+        type:         'expense',
+        category:     'WHT Payable (Tax)',
+        description:  `WHT ${whtPct}% on ${purchase.number} — ${purchase.supplierName}`,
+        partyName:    purchase.supplierName || '',
+        accountHeadID: purchase.accountHeadID || '',
+        taxHeadID:    'TAX-WHT',
+        reference:    purchase.number,
+        whtPct:       parseFloat(whtPct) || 0,
+        grossAmount:  gross,
+        debit:        0,
+        credit:       wht,
+        wallet:       'Tax Head',
+        partyType:    'supplier',
+        challanStatus: 'pending',
+        notes:        notes || '',
+        companyId:    purchase.companyId || 'TAT',
       })
     }
 
