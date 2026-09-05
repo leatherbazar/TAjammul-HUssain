@@ -369,7 +369,7 @@ function ReceiveStockModal({ order, onConfirm, onCancel }) {
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const totalAmount = (order.items || []).reduce((s, i) =>
-    s + (parseInt(i.qty) || 0) * (parseFloat(i.marketPrice) || 0), 0)
+    s + (parseInt(i.qty) || 0) * (parseFloat(i.purchasePrice || i.costPrice) || 0), 0)
 
   const go = async () => {
     setLoading(true)
