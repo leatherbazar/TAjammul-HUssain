@@ -2220,11 +2220,18 @@ app.post('/api/upload', (req, res, next) => {
 
     const { folder = 'tat-erp', refId = '', refType = '' } = req.body
 
+    // Images → resource_type:'image' so Cloudinary can serve/transform them.
+    // Everything else (PDF, DOCX, XLSX …) → resource_type:'raw' so Cloudinary
+    // stores and serves the original binary via /raw/upload/ — NOT the image
+    // pipeline, which corrupts PDFs and causes "Failed to load PDF document".
+    const isImage = (req.file.mimetype || '').startsWith('image/')
+    const resourceType = isImage ? 'image' : 'raw'
+
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
           folder: `tat-erp/${folder}`,
-          resource_type: 'auto', // handles PDF, images, docs etc
+          resource_type: resourceType,
           public_id: `${refType}_${refId}_${Date.now()}`,
           use_filename: true,
         },
@@ -2240,6 +2247,7 @@ app.post('/api/upload', (req, res, next) => {
       publicId: result.public_id,
       originalName: req.file.originalname,
       fileType: req.file.mimetype,
+      resourceType,   // 'image' or 'raw' — needed for correct delete later
       size: req.file.size,
       refId, refType, folder,
       uploadedBy: req.body.uploadedBy || 'unknown',
@@ -2275,7 +2283,10 @@ app.get('/api/attachments', async (req, res) => {
 app.delete('/api/attachments/:publicId', async (req, res) => {
   try {
     const publicId = decodeURIComponent(req.params.publicId)
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' })
+    // Look up the stored resourceType so we destroy from the right Cloudinary bucket
+    const record = await Attachment.findOne({ publicId }).lean()
+    const resourceType = record?.resourceType || (record?.fileType?.startsWith('image/') ? 'image' : 'raw')
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType })
     await Attachment.findOneAndDelete({ publicId })
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
