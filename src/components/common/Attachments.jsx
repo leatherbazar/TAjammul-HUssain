@@ -3,10 +3,21 @@ import toast from 'react-hot-toast'
 
 const FILE_ICONS = {
   'application/pdf': '📄',
-  'image/png': '🖼️', 'image/jpeg': '🖼️', 'image/jpg': '🖼️', 'image/webp': '🖼️',
+  'image/png': '🖼️', 'image/jpeg': '🖼️', 'image/jpg': '🖼️', 'image/webp': '🖼️', 'image/gif': '🖼️', 'image/svg+xml': '🖼️',
   'application/msword': '📝', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
   'application/vnd.ms-excel': '📊', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '📊',
+  'application/vnd.ms-powerpoint': '📑', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': '📑',
+  'text/plain': '📃', 'text/csv': '📊',
+  'application/zip': '🗜️', 'application/x-rar-compressed': '🗜️', 'application/x-7z-compressed': '🗜️',
+  'video/mp4': '🎬', 'video/quicktime': '🎬', 'audio/mpeg': '🎵', 'audio/wav': '🎵',
   'default': '📎'
+}
+
+// File types the browser can display inline — everything else triggers a download
+const INLINE_VIEWABLE = new Set(['application/pdf', 'text/plain', 'text/csv'])
+
+function canViewInline(mimetype = '') {
+  return mimetype.startsWith('image/') || INLINE_VIEWABLE.has(mimetype)
 }
 
 function formatSize(bytes) {
@@ -99,7 +110,6 @@ export default function Attachments({ refId, refType, uploadedBy, readOnly = fal
               {uploading ? '⏳ Uploading...' : '+ Upload File'}
             </button>
             <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
               onChange={handleUpload}
             />
           </>
@@ -118,6 +128,7 @@ export default function Attachments({ refId, refType, uploadedBy, readOnly = fal
           {files.map((file, i) => {
             const icon = FILE_ICONS[file.fileType] || FILE_ICONS['default']
             const isDeleting = deleting === file.publicId
+            const inline = canViewInline(file.fileType)
             return (
               <div key={file.publicId || i} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
@@ -132,8 +143,9 @@ export default function Attachments({ refId, refType, uploadedBy, readOnly = fal
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatSize(file.size)}</div>
                 </div>
                 <a href={file.url} target="_blank" rel="noopener noreferrer"
+                  {...(!inline && { download: file.originalName })}
                   style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--green)', textDecoration: 'none', flexShrink: 0 }}>
-                  👁️ View
+                  {inline ? '👁️ View' : '⬇️ Download'}
                 </a>
                 {!readOnly && (
                   <button onClick={() => handleDelete(file)} disabled={isDeleting}
