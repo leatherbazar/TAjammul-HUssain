@@ -1185,14 +1185,32 @@ app.post('/api/supplyOrders', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Helper: merge qty into existing inventory or create new item
-async function upsertInventoryItem({ description, color, qty, unit, costPrice, supplierName, matrixRows }) {
-  // Try exact name match first
-  let inv = await models.inventory.findOne({ name: { $regex: `^${description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean()
+// Fix 2: Weighted Average Cost (WAC) — never overwrites historical costPrice
+// Fix 4: Transfers sellPrice from Supply Order to inventory on upsert
+async function upsertInventoryItem({ description, color, qty, unit, costPrice, sellPrice = 0, supplierName, matrixRows }) {
+  const safeDesc = description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let inv = await models.inventory.findOne({ name: { $regex: `^${safeDesc}$`, $options: 'i' } }).lean()
   if (inv) {
-    await models.inventory.findOneAndUpdate({ id: inv.id }, { $inc: { qty }, $set: { costPrice, updatedAt: new Date() } })
+    // WAC: newAvg = (existingQty × existingCost + incomingQty × incomingCost) / newTotalQty
+    const existingQty  = inv.qty || 0
+    const existingCost = inv.costPrice || 0
+    const newQty       = existingQty + qty
+    const newAvgCost   = newQty > 0
+      ? (existingQty * existingCost + qty * costPrice) / newQty
+      : costPrice
+    const totalCostValue = newQty * newAvgCost
+    const update = {
+      qty: newQty,
+      costPrice: +newAvgCost.toFixed(4),
+      totalCostValue: +totalCostValue.toFixed(4),
+      updatedAt: new Date(),
+    }
+    // Only update sellPrice if the incoming value is explicitly set
+    if (sellPrice > 0) update.sellPrice = sellPrice
+    await models.inventory.findOneAndUpdate({ id: inv.id }, { $set: update })
     return inv
   }
-  // Create new
+  // Create new inventory item
   const newInv = await models.inventory.create({
     id: Date.now().toString() + Math.floor(Math.random() * 9999),
     name: description,
@@ -1202,7 +1220,8 @@ async function upsertInventoryItem({ description, color, qty, unit, costPrice, s
     qty,
     unit: unit || 'pcs',
     costPrice,
-    sellPrice: 0,
+    totalCostValue: qty * costPrice,
+    sellPrice: sellPrice || 0,
     minStock: 0,
     supplier: supplierName || '',
     useMatrix: !!(matrixRows && matrixRows.length),
@@ -1228,71 +1247,96 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
 
     let totalAmount = 0
     const purchaseItems = []
+    const fulfillmentType = order.fulfillmentType || 'warehouse'  // Fix 3: default warehouse
+    const isDirect = fulfillmentType === 'direct'
 
     for (const item of (order.items || [])) {
-      const qty      = parseInt(item.qty) || 0
-      const costPrice = parseFloat(item.marketPrice) || 0
-      const amount   = qty * costPrice
-      totalAmount   += amount
+      const qty        = parseInt(item.qty) || 0
+      // Fix 4: purchasePrice = cost to us (supplier side); marketPrice = selling price (client side)
+      const costPrice  = parseFloat(item.purchasePrice || item.costPrice) || parseFloat(item.marketPrice) || 0
+      const sellPrice  = parseFloat(item.marketPrice || item.sellingPrice) || 0
+      const amount     = qty * costPrice
+      totalAmount     += amount
 
-      // Upsert into inventory
-      const inv = await upsertInventoryItem({
-        description:  item.description,
-        color:        item.color || '',
-        qty,
-        unit:         item.unit || 'pcs',
-        costPrice,
-        supplierName: order.supplierName,
-        matrixRows:   item.matrixRows || [],
-      })
+      if (item.isService || isDirect) {
+        // ── Fix 1 / Fix 3: SERVICE or DIRECT — bypass inventory & stock movement ──
+        purchaseItems.push({
+          description:  item.description,
+          color:        item.color || '',
+          qty,
+          unit:         item.unit || 'pcs',
+          costPrice,
+          sellPrice,
+          amount,
+          inventoryId:  null,
+          isService:    !!item.isService,
+          matrixRows:   item.matrixRows || [],
+        })
+      } else {
+        // ── WAREHOUSE: upsert inventory (WAC) + stock movement ────────────────
+        const inv = await upsertInventoryItem({
+          description:  item.description,
+          color:        item.color || '',
+          qty,
+          unit:         item.unit || 'pcs',
+          costPrice,
+          sellPrice,                          // Fix 4: transfer agreed sell price
+          supplierName: order.supplierName,
+          matrixRows:   item.matrixRows || [],
+        })
 
-      // Stock movement log
-      await StockMovement.create({
-        id: Date.now().toString() + Math.floor(Math.random() * 999),
-        inventoryId:  inv.id,
-        itemName:     item.description,
-        date:         purchaseDate,
-        type:         'IN',
-        qty,
-        unit:         item.unit || 'pcs',
-        color:        item.color || '',
-        costPrice,
-        documentRef:  number,
-        documentType: 'purchase',
-        notes:        `From SO ${order.number}`,
-      })
+        await StockMovement.create({
+          id: Date.now().toString() + Math.floor(Math.random() * 999),
+          inventoryId:  inv.id,
+          itemName:     item.description,
+          date:         purchaseDate,
+          type:         'IN',
+          qty,
+          unit:         item.unit || 'pcs',
+          color:        item.color || '',
+          costPrice,
+          documentRef:  number,
+          documentType: 'purchase',
+          notes:        `From SO ${order.number}`,
+        })
 
-      purchaseItems.push({
-        description:  item.description,
-        color:        item.color || '',
-        qty,
-        unit:         item.unit || 'pcs',
-        costPrice,
-        amount,
-        inventoryId:  inv.id,
-        matrixRows:   item.matrixRows || [],
-      })
+        purchaseItems.push({
+          description:  item.description,
+          color:        item.color || '',
+          qty,
+          unit:         item.unit || 'pcs',
+          costPrice,
+          sellPrice,
+          amount,
+          inventoryId:  inv.id,
+          isService:    false,
+          matrixRows:   item.matrixRows || [],
+        })
+      }
     }
 
     // Create Purchase record
     const purchase = await Purchase.create({
       id: Date.now().toString(),
       number,
-      supplyOrderId:     order.id,
-      supplyOrderNumber: order.number,
-      supplierName:      order.supplierName,
-      supplierContact:   order.supplierContact,
-      accountHeadID:     order.accountHeadID,
-      date:              purchaseDate,
-      items:             purchaseItems,
+      supplyOrderId:        order.id,
+      supplyOrderNumber:    order.number,
+      supplierName:         order.supplierName,
+      supplierContact:      order.supplierContact,
+      accountHeadID:        order.accountHeadID,
+      date:                 purchaseDate,
+      items:                purchaseItems,
       totalAmount,
-      paidAmount:        0,
-      paymentStatus:     'unpaid',
-      notes:             req.body.notes || order.notes || '',
-      status:            'received',
+      paidAmount:           0,
+      paymentStatus:        'unpaid',
+      notes:                req.body.notes || order.notes || '',
+      status:               'received',
+      fulfillmentType,                          // Fix 3: store fulfillment mode
+      clientAccountHeadID:  order.clientAccountHeadID || '',
+      clientInvoiceRef:     order.clientInvoiceRef    || '',
     })
 
-    // Mark supply order as delivered (try custom id, fall back to _id)
+    // Mark supply order as delivered
     let soUpdated = await models.supplyOrders.findOneAndUpdate(
       { id: req.params.soId }, { $set: { status: 'delivered', purchaseRef: number } }, { new: true }
     )
@@ -1300,27 +1344,37 @@ app.post('/api/purchases/from-supply-order/:soId', async (req, res) => {
       try { await models.supplyOrders.findByIdAndUpdate(req.params.soId, { $set: { status: 'delivered', purchaseRef: number } }) } catch (_) {}
     }
 
-    // ── SUPPLIER LEDGER: Credit = goods received (AP — we owe supplier) ────────
+    // ── Fix 3: Link invoice if pre-specified on direct SO ────────────────────
+    if (isDirect && order.clientInvoiceRef) {
+      await Invoice.findOneAndUpdate(
+        { number: order.clientInvoiceRef },
+        { $set: { purchaseRef: number } }
+      )
+    }
+
+    // ── SUPPLIER LEDGER: Credit = goods received (AP — we owe supplier) ──────
     if (order.accountHeadID && totalAmount > 0) {
       await postLedgerEntry({
         accountHeadID: order.accountHeadID,
         contactName:   order.supplierName,
         date:          purchaseDate,
-        description:   `Purchase Received: ${number} (ref ${order.number})`,
+        description:   `${isDirect ? 'Direct/B2B' : 'Stock'} Purchase: ${number} (SO: ${order.number})`,
         documentRef:   number,
         documentType:  'purchase',
         debit:         0,
-        credit:        totalAmount,  // credit on supplier = AP increases (we owe them)
+        credit:        totalAmount,
       })
     }
 
-    // ── DAY BOOK: Auto-entry (direct create, no ledger re-trigger) ────────────
+    // ── DAY BOOK: expense entry → AP (same for both warehouse and direct) ─────
     await models.dayBook.create({
       id:          Date.now().toString(),
       date:        purchaseDate,
       type:        'expense',
-      category:    'Purchase',
-      description: `Stock Received: ${number} from ${order.supplierName} (SO: ${order.number})`,
+      category:    isDirect ? 'COGS - Direct Fulfilment' : 'Purchase',
+      description: isDirect
+        ? `Direct/B2B Purchase: ${number} from ${order.supplierName} (SO: ${order.number})`
+        : `Stock Received: ${number} from ${order.supplierName} (SO: ${order.number})`,
       partyName:   order.supplierName,
       reference:   number,
       credit:      totalAmount,
@@ -1351,37 +1405,47 @@ app.post('/api/purchases', async (req, res) => {
     let totalAmount = 0
     const purchaseItems = []
 
+    const fulfillmentType = req.body.fulfillmentType || 'warehouse'  // Fix 3
+    const isDirect = fulfillmentType === 'direct'
+
     for (const item of (req.body.items || [])) {
       const qty       = parseInt(item.qty) || 0
       const costPrice = parseFloat(item.costPrice) || 0
+      const sellPrice = parseFloat(item.sellPrice) || 0   // Fix 4
       const amount    = qty * costPrice
       totalAmount    += amount
 
-      const inv = await upsertInventoryItem({
-        description:  item.description,
-        color:        item.color || '',
-        qty,
-        unit:         item.unit || 'pcs',
-        costPrice,
-        supplierName: req.body.supplierName,
-        matrixRows:   item.matrixRows || [],
-      })
+      if (item.isService || isDirect) {
+        // Fix 1 / Fix 3: bypass inventory for service items or direct fulfilment
+        purchaseItems.push({ ...item, qty, costPrice, sellPrice, amount, inventoryId: null, isService: !!item.isService })
+      } else {
+        const inv = await upsertInventoryItem({
+          description:  item.description,
+          color:        item.color || '',
+          qty,
+          unit:         item.unit || 'pcs',
+          costPrice,
+          sellPrice,                           // Fix 4: carry agreed sell price
+          supplierName: req.body.supplierName,
+          matrixRows:   item.matrixRows || [],
+        })
 
-      await StockMovement.create({
-        id: Date.now().toString() + Math.floor(Math.random() * 999),
-        inventoryId:  inv.id,
-        itemName:     item.description,
-        date:         purchaseDate,
-        type:         'IN',
-        qty,
-        unit:         item.unit || 'pcs',
-        color:        item.color || '',
-        costPrice,
-        documentRef:  number,
-        documentType: 'purchase',
-      })
+        await StockMovement.create({
+          id: Date.now().toString() + Math.floor(Math.random() * 999),
+          inventoryId:  inv.id,
+          itemName:     item.description,
+          date:         purchaseDate,
+          type:         'IN',
+          qty,
+          unit:         item.unit || 'pcs',
+          color:        item.color || '',
+          costPrice,
+          documentRef:  number,
+          documentType: 'purchase',
+        })
 
-      purchaseItems.push({ ...item, qty, costPrice, amount, inventoryId: inv.id })
+        purchaseItems.push({ ...item, qty, costPrice, sellPrice, amount, inventoryId: inv.id, isService: false })
+      }
     }
 
     const purchase = await Purchase.create({
@@ -1390,6 +1454,7 @@ app.post('/api/purchases', async (req, res) => {
       number,
       items: purchaseItems,
       totalAmount,
+      fulfillmentType,
     })
 
     if (req.body.accountHeadID && totalAmount > 0) {
@@ -1397,7 +1462,7 @@ app.post('/api/purchases', async (req, res) => {
         accountHeadID: req.body.accountHeadID,
         contactName:   req.body.supplierName,
         date:          purchaseDate,
-        description:   `Purchase: ${number}`,
+        description:   `${isDirect ? 'Direct/B2B' : ''} Purchase: ${number}`,
         documentRef:   number,
         documentType:  'purchase',
         debit:         0,
@@ -1410,8 +1475,8 @@ app.post('/api/purchases', async (req, res) => {
       id:          Date.now().toString(),
       date:        purchaseDate,
       type:        'expense',
-      category:    'Purchase',
-      description: `Direct Purchase: ${number} from ${req.body.supplierName || 'Supplier'}`,
+      category:    isDirect ? 'COGS - Direct Fulfilment' : 'Purchase',
+      description: `${isDirect ? 'Direct/B2B' : 'Direct'} Purchase: ${number} from ${req.body.supplierName || 'Supplier'}`,
       partyName:   req.body.supplierName || '',
       reference:   number,
       credit:      totalAmount,
@@ -1577,7 +1642,8 @@ app.post('/api/sales', async (req, res) => {
         })
       }
 
-      saleItems.push({ ...item, qty, costPrice, salePrice, amount, profit, marginPct })
+      saleItems.push({ ...item, qty, costPrice, salePrice, amount, profit, marginPct,
+        belowCost: salePrice < costPrice && costPrice > 0 })
     }
 
     if (stockErrs.length > 0) {

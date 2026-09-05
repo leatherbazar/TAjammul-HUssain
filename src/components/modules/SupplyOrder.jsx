@@ -15,12 +15,14 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
     title: '', supplierName: '', supplierContact: '', accountHeadID: '',
     date: new Date().toISOString().slice(0, 10),
     assignedTo: isEmployee ? currentUser?.id : '',
-    items: [{ id: Date.now(), description: '', color: '', qty: 1, marketPrice: 0, useMatrix: false, matrixRows: [], note: '' }],
+    fulfillmentType: 'warehouse',        // Fix 3: warehouse | direct
+    clientInvoiceRef: '',
+    items: [{ id: Date.now(), description: '', color: '', qty: 1, purchasePrice: 0, marketPrice: 0, isService: false, useMatrix: false, matrixRows: [], note: '' }],
     notes: '', status: 'pending', priority: 'normal',
   })
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const addItem = () => setForm(f => ({ ...f, items: [...f.items, { id: Date.now(), description: '', color: '', qty: 1, marketPrice: 0, useMatrix: false, matrixRows: [], note: '' }] }))
+  const addItem = () => setForm(f => ({ ...f, items: [...f.items, { id: Date.now(), description: '', color: '', qty: 1, purchasePrice: 0, marketPrice: 0, isService: false, useMatrix: false, matrixRows: [], note: '' }] }))
   const removeItem = (id) => setForm(f => ({ ...f, items: f.items.filter(i => i.id !== id) }))
   const updateItem = (id, k, v) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, [k]: v } : i) }))
   const updateMatrix = (id, rows) => setForm(f => ({ ...f, items: f.items.map(i => i.id === id ? { ...i, matrixRows: rows } : i) }))
@@ -163,6 +165,32 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
               {['pending', 'in-progress', 'sourced', 'delivered', 'cancelled'].map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
+          {/* Fix 3: Fulfillment Destination */}
+          <div className="input-group col-span-2">
+            <label className="input-label">Fulfillment Destination</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[['warehouse', '🏭 Into Warehouse Stock'], ['direct', '📦 Direct to Customer (B2B)']].map(([val, label]) => (
+                <button key={val} type="button"
+                  onClick={() => setField('fulfillmentType', val)}
+                  style={{
+                    flex: 1, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                    border: `1px solid ${form.fulfillmentType === val ? (val === 'direct' ? 'var(--blue)' : 'var(--green)') : 'var(--glass-border)'}`,
+                    background: form.fulfillmentType === val ? (val === 'direct' ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.12)') : 'transparent',
+                    color: form.fulfillmentType === val ? (val === 'direct' ? 'var(--blue)' : 'var(--green)') : 'var(--text-muted)',
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {form.fulfillmentType === 'direct' && (
+            <div className="input-group">
+              <label className="input-label">Pre-link to Invoice # (optional)</label>
+              <input className="input" value={form.clientInvoiceRef}
+                onChange={e => setField('clientInvoiceRef', e.target.value)}
+                placeholder="e.g. INV-254" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -180,12 +208,24 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
           const profitAmt = amount - costAmount
 
           return (
-            <div key={item.id} style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
+            <div key={item.id} style={{ marginBottom: 14, padding: 14, borderRadius: 10,
+              border: `1px solid ${item.isService ? 'rgba(99,102,241,0.35)' : 'var(--glass-border)'}`,
+              background: item.isService ? 'rgba(99,102,241,0.04)' : 'rgba(255,255,255,0.02)' }}>
               <div className="form-grid">
                 <div className="input-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="input-label">Item #{idx + 1}</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="input-label" style={{ marginBottom: 0 }}>Item #{idx + 1}</label>
+                    {/* Fix 1: isService toggle */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                      color: item.isService ? 'var(--blue)' : 'var(--text-muted)' }}>
+                      <input type="checkbox" checked={!!item.isService}
+                        onChange={e => updateItem(item.id, 'isService', e.target.checked)}
+                        style={{ accentColor: 'var(--blue)' }} />
+                      Service / Non-Stock (no inventory)
+                    </label>
+                  </div>
                   <input className="input" value={item.description} onChange={e => updateItem(item.id, 'description', e.target.value)}
-                    placeholder="Item description" spellCheck />
+                    placeholder={item.isService ? 'Service description (e.g. Labour, Delivery Fee)' : 'Item description'} spellCheck />
                 </div>
                 <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -204,18 +244,30 @@ function SupplyOrderForm({ initial, onSave, onCancel, isEmployee, currentUser })
                       )}
                     </div>
                     <div style={{ flex: '1 1 130px' }}>
-                      <label className="input-label" style={{ color: 'var(--amber)' }}>Purchase Price (PKR)</label>
+                      <label className="input-label" style={{ color: 'var(--amber)' }}>
+                        {item.isService ? 'Cost / Fee (PKR)' : 'Purchase Price (PKR) — Cost to Us'}
+                      </label>
                       <input type="number" className="input" min="0" value={item.purchasePrice || ''}
                         onChange={e => updateItem(item.id, 'purchasePrice', e.target.value)}
                         placeholder="0" style={{ borderColor: 'rgba(245,158,11,0.4)' }} />
                     </div>
-                    <div style={{ flex: '1 1 130px' }}>
-                      <label className="input-label">Selling Price (PKR) {isEmployee && '← Update'}</label>
-                      <input type="number" className="input" min="0" value={item.marketPrice}
-                        onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
-                        style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
-                    </div>
-                    {purchasePrice > 0 && marketPrice > 0 && (
+                    {!item.isService && (
+                      <div style={{ flex: '1 1 130px' }}>
+                        <label className="input-label">Selling Price (PKR) {isEmployee && '← Update'}</label>
+                        <input type="number" className="input" min="0" value={item.marketPrice}
+                          onChange={e => updateItem(item.id, 'marketPrice', e.target.value)}
+                          style={isEmployee ? { borderColor: 'var(--amber)' } : {}} />
+                      </div>
+                    )}
+                    {item.isService && (
+                      <div style={{ flex: '1 1 130px', display: 'flex', alignItems: 'flex-end' }}>
+                        <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(99,102,241,0.15)',
+                          border: '1px solid rgba(99,102,241,0.3)', fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>
+                          🔧 SVC — No Inventory
+                        </div>
+                      </div>
+                    )}
+                    {!item.isService && purchasePrice > 0 && marketPrice > 0 && (
                       <div style={{ flex: '0 0 150px' }}>
                         <label className="input-label" style={{ color: profitAmt >= 0 ? 'var(--green)' : '#f87171' }}>Profit Margin</label>
                         <div style={{ padding: '9px 12px', background: profitAmt >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', borderRadius: 8, border: `1px solid ${profitAmt >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, fontWeight: 700, color: profitAmt >= 0 ? 'var(--green)' : '#f87171', whiteSpace: 'nowrap', fontSize: 13 }}>
