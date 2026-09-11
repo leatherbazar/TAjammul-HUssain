@@ -274,8 +274,15 @@ export default function DeliveryNotes() {
   }, [data.deliveryNotes])
 
   const notes = useMemo(() => {
-    let list = data.deliveryNotes || []
-    if (monthFilter !== 'all') list = list.filter(n => (n.date || n.createdAt || '').slice(0,7) === monthFilter)
+    let list = (data.deliveryNotes || []).map(n => {
+      if (monthFilter === 'all') return n
+      const m = (n.date || n.createdAt || '').slice(0, 7)
+      if (m === monthFilter) return n
+      // Carry forward: pending/dispatched notes not yet delivered or returned
+      if (m < monthFilter && (n.status === 'pending' || n.status === 'dispatched'))
+        return { ...n, _carryForward: true }
+      return null
+    }).filter(Boolean)
     if (!search) return list
     return list.filter(n => n.clientName?.toLowerCase().includes(search.toLowerCase()) || n.number?.includes(search))
   }, [data.deliveryNotes, search, monthFilter])
@@ -326,7 +333,10 @@ export default function DeliveryNotes() {
             {notes.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No delivery notes.</td></tr>}
             {notes.map(n => (
               <tr key={n.id}>
-                <td className="font-mono" style={{ fontSize: 12 }}>{n.number}</td>
+                <td className="font-mono" style={{ fontSize: 12 }}>
+                  {n.number}
+                  {n._carryForward && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '1px 5px', marginTop: 3, whiteSpace: 'nowrap' }}>↩ CARRIED FWD</div>}
+                </td>
                 <td style={{ fontWeight: 600 }}>{n.clientName}</td>
                 <td style={{ maxWidth: 200 }}>
                   {(n.subject || n.title) && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{n.subject || n.title}</div>}
