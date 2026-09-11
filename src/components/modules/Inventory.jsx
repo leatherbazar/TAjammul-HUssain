@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import AttributeMatrix, { calcMatrixTotal } from '../common/AttributeMatrix'
 import MasterCodeModal from '../common/MasterCodeModal'
@@ -128,11 +128,101 @@ function ItemForm({ initial, onSave, onCancel }) {
   )
 }
 
+function StockMovementModal({ item, onClose }) {
+  const [movements, setMovements] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/stock-movements?inventoryId=${item.id}`)
+      .then(r => r.json())
+      .then(d => { setMovements(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [item.id])
+
+  const totalIn  = movements.filter(m => m.type === 'IN').reduce((s, m) => s + (m.qty || 0), 0)
+  const totalOut = movements.filter(m => m.type === 'OUT').reduce((s, m) => s + (m.qty || 0), 0)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
+      <div style={{ background: 'linear-gradient(145deg,#1e1e32 0%,#16162a 100%)', borderRadius: 16, padding: 28, maxWidth: 680, width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 32px 64px rgba(0,0,0,0.9)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#fff' }}>📊 Stock Movements</h3>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>{item.name} · {item.sku}</div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ Close</button>
+        </div>
+
+        {/* Summary row */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1, padding: '10px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>TOTAL IN</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--green)', fontFamily: 'monospace' }}>+{totalIn} <span style={{ fontSize: 12 }}>{item.unit}</span></div>
+          </div>
+          <div style={{ flex: 1, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>TOTAL OUT</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--red)', fontFamily: 'monospace' }}>−{totalOut} <span style={{ fontSize: 12 }}>{item.unit}</span></div>
+          </div>
+          <div style={{ flex: 1, padding: '10px 14px', borderRadius: 10, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>CURRENT STOCK</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--blue)', fontFamily: 'monospace' }}>{item.qty} <span style={{ fontSize: 12 }}>{item.unit}</span></div>
+          </div>
+        </div>
+
+        {/* Movement table */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Loading movements…</div>
+          ) : movements.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No stock movements recorded yet.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  {['Date', 'Type', 'Qty', 'Doc Ref', 'Cost / Sale Price', 'Notes'].map(h => (
+                    <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: 11 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m, i) => (
+                  <tr key={m.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-muted)' }}>{m.date || '—'}</td>
+                    <td style={{ padding: '7px 10px' }}>
+                      <span style={{ fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 6,
+                        background: m.type === 'IN' ? 'rgba(34,197,94,0.15)' : m.type === 'OUT' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
+                        color: m.type === 'IN' ? 'var(--green)' : m.type === 'OUT' ? 'var(--red)' : '#818cf8' }}>
+                        {m.type === 'IN' ? '▲ IN' : m.type === 'OUT' ? '▼ OUT' : m.type}
+                      </span>
+                    </td>
+                    <td style={{ padding: '7px 10px', fontWeight: 700, fontFamily: 'monospace',
+                      color: m.type === 'IN' ? 'var(--green)' : 'var(--red)' }}>
+                      {m.type === 'IN' ? '+' : '−'}{m.qty} {m.unit || item.unit}
+                    </td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 11, color: 'var(--blue)' }}>{m.documentRef || '—'}</td>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-muted)' }}>
+                      {m.type === 'IN' && m.costPrice  ? `Cost: PKR ${Number(m.costPrice).toLocaleString()}` : ''}
+                      {m.type === 'OUT' && m.salePrice ? `Sale: PKR ${Number(m.salePrice).toLocaleString()}` : ''}
+                    </td>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-muted)', fontSize: 11 }}>{m.notes || m.documentType || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Inventory({ isEmployee = false }) {
   const { data, addRecord, updateRecord, deleteRecord, refreshData } = useApp()
   const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [masterAction, setMasterAction] = useState(null)
+  const [movementItem, setMovementItem] = useState(null)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
 
@@ -250,6 +340,7 @@ export default function Inventory({ isEmployee = false }) {
                   <td><span style={{ color: margin > 20 ? 'var(--green)' : margin > 10 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12 }}>{margin}%</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-secondary btn-xs" title="Stock movements" onClick={() => setMovementItem(item)}>📊</button>
                       <button className="btn btn-secondary btn-xs" onClick={() => setMasterAction({ type: 'edit', item })}>✏️</button>
                       {!isEmployee && <button className="btn btn-danger btn-xs" onClick={() => setMasterAction({ type: 'delete', id: item.id })}>🗑️</button>}
                     </div>
@@ -272,6 +363,7 @@ export default function Inventory({ isEmployee = false }) {
           onCancel={() => setMasterAction(null)}
         />
       )}
+      {movementItem && <StockMovementModal item={movementItem} onClose={() => setMovementItem(null)} />}
     </div>
   )
 }
