@@ -994,14 +994,21 @@ export default function Invoices() {
   }, [data.invoices])
 
   const invoices = useMemo(() => {
-    let list = data.invoices || []
-    if (monthFilter !== 'all') list = list.filter(i => (i.date || i.createdAt || '').slice(0,7) === monthFilter)
+    let list = (data.invoices || []).map(i => {
+      if (monthFilter === 'all') return i
+      const m = (i.date || i.createdAt || '').slice(0, 7)
+      if (m === monthFilter) return i
+      // Carry forward: unpaid/partial from previous months
+      if (m < monthFilter && (i.paymentStatus === 'unpaid' || i.paymentStatus === 'partial'))
+        return { ...i, _carryForward: true }
+      return null
+    }).filter(Boolean)
     if (search) list = list.filter(i =>
       i.clientName?.toLowerCase().includes(search.toLowerCase()) || i.number?.includes(search)
     )
     if (statusFilter !== 'all') list = list.filter(i => i.status === statusFilter)
     return list
-  }, [data.invoices, search, statusFilter])
+  }, [data.invoices, search, statusFilter, monthFilter])
 
   const handleSave = async (f) => {
     const loadId = toast.loading('Saving invoice…')
@@ -1228,7 +1235,10 @@ export default function Invoices() {
 
               return (
                 <tr key={inv.id}>
-                  <td className="font-mono" style={{ color: 'var(--red)', fontSize: 13, fontWeight: 800 }}>{inv.number}</td>
+                  <td className="font-mono" style={{ color: 'var(--red)', fontSize: 13, fontWeight: 800 }}>
+                    {inv.number}
+                    {inv._carryForward && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '1px 5px', marginTop: 3, whiteSpace: 'nowrap' }}>↩ CARRIED FWD</div>}
+                  </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{inv.clientName}</div>
                     {inv.quotationRef && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Ref: {inv.quotationRef}</div>}

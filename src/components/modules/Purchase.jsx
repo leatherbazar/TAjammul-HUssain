@@ -249,8 +249,15 @@ export default function Purchases() {
   }, [data.purchases])
 
   const purchases = useMemo(() => {
-    let list = data.purchases || []
-    if (monthFilter !== 'all') list = list.filter(p => (p.date || p.createdAt || '').slice(0,7) === monthFilter)
+    let list = (data.purchases || []).map(p => {
+      if (monthFilter === 'all') return p
+      const m = (p.date || p.createdAt || '').slice(0, 7)
+      if (m === monthFilter) return p
+      // Carry forward: unpaid/partial supplier AP from previous months
+      if (m < monthFilter && (p.paymentStatus === 'unpaid' || p.paymentStatus === 'partial'))
+        return { ...p, _carryForward: true }
+      return null
+    }).filter(Boolean)
     if (!search) return list
     const q = search.toLowerCase()
     return list.filter(p => p.supplierName?.toLowerCase().includes(q) || p.number?.includes(q))
@@ -370,7 +377,10 @@ export default function Purchases() {
                   const balance = (p.totalAmount || 0) - (p.paidAmount || 0)
                   return (
                     <tr key={p.id}>
-                      <td className="font-mono" style={{ fontSize: 12 }}>{p.number}</td>
+                      <td className="font-mono" style={{ fontSize: 12 }}>
+                        {p.number}
+                        {p._carryForward && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '1px 5px', marginTop: 3, whiteSpace: 'nowrap' }}>↩ CARRIED FWD</div>}
+                      </td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{p.supplierName || '—'}</div>
                         {p.supplyOrderNumber && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>from {p.supplyOrderNumber}</div>}

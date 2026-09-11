@@ -273,8 +273,15 @@ export default function Quotations() {
   }, [data.quotations])
 
   const quotations = useMemo(() => {
-    let list = data.quotations || []
-    if (monthFilter !== 'all') list = list.filter(q => (q.date || q.createdAt || '').slice(0,7) === monthFilter)
+    let list = (data.quotations || []).map(q => {
+      if (monthFilter === 'all') return q
+      const m = (q.date || q.createdAt || '').slice(0, 7)
+      if (m === monthFilter) return q
+      // Carry forward: sent/draft quotes still awaiting client decision
+      if (m < monthFilter && (q.status === 'sent' || q.status === 'draft'))
+        return { ...q, _carryForward: true }
+      return null
+    }).filter(Boolean)
     if (search) list = list.filter(q => q.clientName?.toLowerCase().includes(search.toLowerCase()) || q.number?.includes(search))
     if (statusFilter !== 'all') list = list.filter(q => q.status === statusFilter)
     if (clientFilter !== 'all') list = list.filter(q => q.clientName === clientFilter)
@@ -447,7 +454,10 @@ export default function Quotations() {
               )
               return (
               <tr key={q.id}>
-                <td className="font-mono" style={{ fontSize: 12 }}>{q.number}</td>
+                <td className="font-mono" style={{ fontSize: 12 }}>
+                  {q.number}
+                  {q._carryForward && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '1px 5px', marginTop: 3, whiteSpace: 'nowrap' }}>↩ CARRIED FWD</div>}
+                </td>
                 <td><div style={{ fontWeight: 600 }}>{q.clientName}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{q.clientContact}</div></td>
                 <td style={{ maxWidth: 220 }}>
                   {(q.subject || q.title) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{q.subject || q.title}</div>}

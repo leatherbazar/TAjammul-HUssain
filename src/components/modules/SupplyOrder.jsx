@@ -569,8 +569,16 @@ export default function SupplyOrders({ isEmployee = false }) {
   }, [data.supplyOrders])
 
   const orders = useMemo(() => {
-    let list = data.supplyOrders || []
-    if (monthFilter !== 'all') list = list.filter(o => (o.date || o.createdAt || '').slice(0,7) === monthFilter)
+    const OPEN_STATUSES = new Set(['pending', 'in-progress', 'sourced'])
+    let list = (data.supplyOrders || []).map(o => {
+      if (monthFilter === 'all') return o
+      const m = (o.date || o.createdAt || '').slice(0, 7)
+      if (m === monthFilter) return o
+      // Carry forward: active SOs (not yet received or cancelled) from previous months
+      if (m < monthFilter && OPEN_STATUSES.has(o.status))
+        return { ...o, _carryForward: true }
+      return null
+    }).filter(Boolean)
     if (isEmployee) list = list.filter(o => o.assignedTo === currentUser?.id || !o.assignedTo)
     if (search) list = list.filter(o => o.title?.toLowerCase().includes(search.toLowerCase()))
     return list
@@ -672,7 +680,10 @@ export default function SupplyOrders({ isEmployee = false }) {
             {orders.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No supply orders.</td></tr>}
             {orders.map(o => (
               <tr key={o.id}>
-                <td className="font-mono" style={{ fontSize: 12 }}>{o.number}</td>
+                <td className="font-mono" style={{ fontSize: 12 }}>
+                  {o.number}
+                  {o._carryForward && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '1px 5px', marginTop: 3, whiteSpace: 'nowrap' }}>↩ CARRIED FWD</div>}
+                </td>
                 <td style={{ maxWidth: 240 }}>
                   {o.title && <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 2 }}>{o.title}</div>}
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
